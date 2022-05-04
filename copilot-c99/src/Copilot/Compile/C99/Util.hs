@@ -2,7 +2,6 @@
 module Copilot.Compile.C99.Util
     ( FunEnv
     , funcall
-    , statetell
     , streamaccessorname
     , excpyname
     , streamname
@@ -13,8 +12,6 @@ module Copilot.Compile.C99.Util
     )
   where
 
-import Control.Monad.State
-
 import Copilot.Core  (Id)
 import qualified Language.C99.Simple.AST as C
 
@@ -22,10 +19,6 @@ import qualified Language.C99.Simple.AST as C
 -- used in a function to be generated, since variable declarations are always
 -- listed first at the top of the function body.
 type FunEnv = [C.Decln]
-
--- | `tell` equivalent for `State`.
-statetell :: Monoid m => m -> State m ()
-statetell m = modify ((flip mappend) m)
 
 -- | Turn a stream id into a suitable C variable name.
 streamname :: Id -> String

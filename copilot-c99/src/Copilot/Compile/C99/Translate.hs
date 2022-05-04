@@ -21,7 +21,9 @@ transexpr (Local ty1 _ name e1 e2) = do
   e1' <- transexpr e1
   let cty1 = transtype ty1
       init = Just $ C.InitExpr e1'
-  statetell [C.VarDecln Nothing cty1 name init]
+
+  -- Add variable to function environment
+  modify (`mappend` [C.VarDecln Nothing cty1 name init])
 
   transexpr e2
 
