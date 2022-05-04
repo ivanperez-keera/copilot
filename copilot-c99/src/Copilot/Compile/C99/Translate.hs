@@ -376,3 +376,12 @@ typeIsFloating :: Type a -> Bool
 typeIsFloating Float  = True
 typeIsFloating Double = True
 typeIsFloating _      = False
+
+-- | Auxiliary type used to collect all the declarations of all the variables
+-- used in a function to be generated, since variable declarations are always
+-- listed first at the top of the function body.
+type FunEnv = [C.Decln]
+
+-- | Define a C expression that calls a function with arguments.
+funcall :: C.Ident -> [C.Expr] -> C.Expr
+funcall name args = C.Funcall (C.Ident name) args
