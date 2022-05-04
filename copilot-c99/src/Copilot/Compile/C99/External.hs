@@ -1,10 +1,13 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE Rank2Types                #-}
 
 -- | Represent information about externs needed in the generation of C99 code
 -- for stream declarations and triggers.
 module Copilot.Compile.C99.External where
 
-import Data.List  (unionBy)
+import Data.List     (nubBy)
+import Data.Maybe    (catMaybes)
+import Data.Typeable (Typeable)
 
 import Copilot.Core
 import Copilot.Compile.C99.Util (excpyname)
@@ -16,39 +19,66 @@ data External = forall a. External
   , exttype    :: Type a
   }
 
--- | Union over lists of External, we solely base the equality on the
--- extname's.
-extunion :: [External] -> [External] -> [External]
-extunion = unionBy (\a b -> extname a == extname b)
-
 -- | Collect all external variables from the streams and triggers.
 --
 -- Although Copilot specifications can contain also properties and theorems,
 -- the C99 backend currently only generates code for streams and triggers.
 gatherexts :: [Stream] -> [Trigger] -> [External]
-gatherexts streams triggers = streamsexts `extunion` triggersexts
+gatherexts streams triggers
+    = nubBy (\a b -> extname a == extname b)
+    $ catMaybes
+    $ concat
+        [ concatMap (flattenStreams exprext) streams
+        , concatMap (flattenTriggers exprext) triggers
+        ]
   where
-    streamsexts  = foldr (extunion . streamexts)  mempty streams
-    triggersexts = foldr (extunion . triggerexts) mempty triggers
+    exprext :: Expr a -> Maybe External
+    exprext (ExternVar ty name _) = Just (External name (excpyname name) ty)
+    exprext _                     = Nothing
 
-    streamexts :: Stream -> [External]
-    streamexts (Stream _ _ expr _) = exprexts expr
+-- * Auxiliary code
 
-    triggerexts :: Trigger -> [External]
-    triggerexts (Trigger _ guard args) = guardexts `extunion` argexts
-      where
-        guardexts = exprexts guard
-        argexts   = concatMap uexprexts args
+-- Traverse a stream and apply a function to all expressions inside, gathering
+-- the result.
+flattenStreams :: (forall c . Typeable c => Expr c -> b)
+               -> Stream
+               -> [b]
+flattenStreams f (Stream _ _ expr _) = flattenExpr f expr
 
-    uexprexts :: UExpr -> [External]
-    uexprexts (UExpr _ expr) = exprexts expr
+-- Traverse a trigger and apply a function to all expressions inside, gathering
+-- the result.
+flattenTriggers :: (forall c . Typeable c => Expr c -> b)
+                -> Trigger
+                -> [b]
+flattenTriggers f (Trigger _ guard args) =
+    concat [ guardexts, argexts ]
+  where
+    guardexts = flattenExpr f guard
+    argexts   = concatMap (flattenUExpr f) args
 
-    exprexts :: Expr a -> [External]
-    exprexts (Local _ _ _ e1 e2)   = exprexts e1 `extunion` exprexts e2
-    exprexts (ExternVar ty name _) = [External name (excpyname name) ty]
-    exprexts (Op1 _ e)             = exprexts e
-    exprexts (Op2 _ e1 e2)         = exprexts e1 `extunion` exprexts e2
-    exprexts (Op3 _ e1 e2 e3)      = exprexts e1 `extunion` exprexts e2
-                                       `extunion` exprexts e3
-    exprexts (Label _ _ e)         = exprexts e
-    exprexts _                     = []
+-- Traverse a uexpr and apply a function to all expressions inside, gathering
+-- the result.
+flattenUExpr :: (forall c . Typeable c => Expr c -> b)
+             -> UExpr
+             -> [b]
+flattenUExpr f (UExpr _ expr) = flattenExpr f expr
+
+-- Traverse an expr and apply a function to all expressions inside, gathering
+-- the result.
+flattenExpr :: Typeable a
+            => (forall c . Typeable c => Expr c -> b)
+            -> Expr a
+            -> [b]
+flattenExpr = go
+  where
+    go :: Typeable a
+       => (forall c . Typeable c => Expr c -> b)
+       -> Expr a
+       -> [b]
+    go f e@(Local _ _ _ e1 e2)   = f e : concat [ go f e1, go f e2 ]
+    go f e@(ExternVar ty name _) = [ f e ]
+    go f e@(Op1 _ e1)            = f e : go f e1
+    go f e@(Op2 _ e1 e2)         = f e : concat [ go f e1, go f e2 ]
+    go f e@(Op3 _ e1 e2 e3)      = f e : concat [ go f e1, go f e2, go f e3 ]
+    go f e@(Label _ _ e1)        = f e : go f e1
+    go f e                       = [ f e ]
