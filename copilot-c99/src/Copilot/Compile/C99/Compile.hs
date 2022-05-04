@@ -97,7 +97,7 @@ compilec cSettings spec = C.TransUnit declns funs
 
     -- Make declarations for copies of external variables.
     mkexts :: [External] -> [C.Decln]
-    mkexts exts = map mkextcpydecln exts
+    mkexts = map mkextcpydecln
 
     -- Make buffer and index declarations for streams.
     mkglobals :: [Stream] -> [C.Decln]
