@@ -11,7 +11,7 @@ import Data.Typeable        (Typeable)
 import qualified Language.C99.Simple as C
 
 import Copilot.Core
-import Copilot.Compile.C99.Util
+import Copilot.Compile.C99.Util (argnames, streamname, streamaccessorname, guardname, indexname, generatorname)
 import Copilot.Compile.C99.External
 import Copilot.Compile.C99.Settings
 import Copilot.Compile.C99.Translate

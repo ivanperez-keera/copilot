@@ -16,7 +16,7 @@ import Language.C99.Pretty  (pretty)
 import qualified Language.C99.Simple as C
 
 import Copilot.Core
-import Copilot.Compile.C99.Util
+import Copilot.Compile.C99.Util (guardname, generatorname, argnames)
 import Copilot.Compile.C99.External
 import Copilot.Compile.C99.Settings
 import Copilot.Compile.C99.Translate

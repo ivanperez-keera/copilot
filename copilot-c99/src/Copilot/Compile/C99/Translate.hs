@@ -9,7 +9,7 @@ import Control.Monad.State
 
 import Copilot.Core
 import Copilot.Compile.C99.Error (impossible)
-import Copilot.Compile.C99.Util
+import Copilot.Compile.C99.Util (streamaccessorname, excpyname)
 
 import qualified Language.C99.Simple as C
 
