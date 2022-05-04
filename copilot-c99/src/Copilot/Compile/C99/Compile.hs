@@ -163,7 +163,7 @@ compileh cSettings spec = C.TransUnit declns []
         extfundecln (Trigger name _ args) = C.FunDecln Nothing cty name params
           where
             cty    = C.TypeSpec C.Void
-            params = map mkparam $ zip (argnames name) args
+            params = zipWith mkparam (argnames name) args
             mkparam (name, UExpr ty _) = C.Param (mkParamTy ty) name
 
             -- Special case for Struct, to pass struct arguments by reference.
