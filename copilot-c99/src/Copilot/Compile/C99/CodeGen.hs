@@ -235,26 +235,27 @@ mkstructforwdecln (Struct x) = C.TypeDecln struct
   where
     struct = C.TypeSpec $ C.Struct (typename x)
 
--- | List all types of an expression, returns items uniquely.
+--- | List all types of an expression, returns items uniquely.
 exprtypes :: Typeable a => Expr a -> [UType]
-exprtypes e = case e of
-  Const ty _            -> typetypes ty
-  Local ty1 ty2 _ e1 e2 -> typetypes ty1 `union` typetypes ty2
-                           `union` exprtypes e1 `union` exprtypes e2
-  Var ty _              -> typetypes ty
-  Drop ty _ _           -> typetypes ty
-  ExternVar ty _ _      -> typetypes ty
-  Op1 _ e1              -> exprtypes e1
-  Op2 _ e1 e2           -> exprtypes e1 `union` exprtypes e2
-  Op3 _ e1 e2 e3        -> exprtypes e1 `union` exprtypes e2 `union` exprtypes e3
-  Label ty _ _          -> typetypes ty
+exprtypes = concat . flattenExpr exprType
+  where
+    -- | List all types of an expression, returns items uniquely.
+    exprType :: Typeable a => Expr a -> [UType]
+    exprType e = case e of
+      Const ty _            -> typetypes ty
+      Local ty1 ty2 _ e1 e2 -> typetypes ty1 `union` typetypes ty2
+      Var ty _              -> typetypes ty
+      Drop ty _ _           -> typetypes ty
+      ExternVar ty _ _      -> typetypes ty
+      Label ty _ _          -> typetypes ty
+      _                     -> []
 
--- | List all types of a type, returns items uniquely.
-typetypes :: Typeable a => Type a -> [UType]
-typetypes ty = case ty of
-  Array ty' -> typetypes ty' `union` [UType ty]
-  Struct x  -> concatMap (\(Value ty' _) -> typetypes ty') (toValues x) `union` [UType ty]
-  _         -> [UType ty]
+    -- | List all types of a type, returns items uniquely.
+    typetypes :: Typeable a => Type a -> [UType]
+    typetypes ty = case ty of
+      Array ty' -> typetypes ty' `union` [UType ty]
+      Struct x  -> concatMap (\(Value ty' _) -> typetypes ty') (toValues x) `union` [UType ty]
+      _         -> [UType ty]
 
 -- | Collect all expression of a list of streams and triggers and wrap them
 -- into an UEXpr.
