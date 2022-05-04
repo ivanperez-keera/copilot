@@ -89,11 +89,11 @@ compilec cSettings spec = C.TransUnit declns funs
     mkstructdeclns :: [UExpr] -> [C.Decln]
     mkstructdeclns es = mapMaybe mkdecln utypes
       where
+        utypes = nub $ concatMap (\(UExpr _ e) -> exprtypes e) es
+
         mkdecln (UType ty) = case ty of
           Struct x -> Just $ mkstructdecln ty
           _        -> Nothing
-
-        utypes = nub $ concatMap (\(UExpr _ e) -> exprtypes e) es
 
     -- Make declarations for copies of external variables.
     mkexts :: [External] -> [C.Decln]
