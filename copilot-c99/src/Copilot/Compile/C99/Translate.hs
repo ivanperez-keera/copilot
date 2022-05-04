@@ -1,7 +1,9 @@
 {-# LANGUAGE GADTs #-}
 
 -- | Translate Copilot Core expressions and operators to C99.
-module Copilot.Compile.C99.Translate where
+module Copilot.Compile.C99.Translate
+    (transexpr, transtype, constarray)
+  where
 
 import Control.Monad.State
 
