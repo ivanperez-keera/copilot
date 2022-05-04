@@ -28,8 +28,8 @@ extunion = unionBy (\a b -> extname a == extname b)
 gatherexts :: [Stream] -> [Trigger] -> [External]
 gatherexts streams triggers = streamsexts `extunion` triggersexts
   where
-    streamsexts  = foldr extunion mempty $ map streamexts streams
-    triggersexts = foldr extunion mempty $ map triggerexts triggers
+    streamsexts  = foldr (extunion . streamexts)  mempty streams
+    triggersexts = foldr (extunion . triggerexts) mempty triggers
 
     streamexts :: Stream -> [External]
     streamexts (Stream _ _ expr _) = exprexts expr
