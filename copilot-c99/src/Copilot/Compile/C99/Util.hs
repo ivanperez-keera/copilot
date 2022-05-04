@@ -47,4 +47,4 @@ argTempName name n = name ++ "_arg_temp" ++ show n
 
 -- | Enumerate all argument names based on trigger name.
 argnames :: String -> [String]
-argnames base = [aname | n <- [0..], let aname = argname base n]
+argnames base = map (argname base) [0..]
