@@ -123,7 +123,7 @@ compilec cSettings spec = C.TransUnit declns funs
         triggergen (Trigger name guard args) = guarddef : argdefs
           where
             guarddef = genfun (guardname name) guard Bool
-            argdefs  = map arggen (zip (argnames name) args)
+            argdefs  = zipWith arggen (argnames name) args
 
             arggen :: (String, UExpr) -> C.FunDef
             arggen (argname, UExpr ty expr) = genfun argname expr ty
