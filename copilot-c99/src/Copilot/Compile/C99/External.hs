@@ -7,7 +7,7 @@ module Copilot.Compile.C99.External where
 import Data.List  (unionBy)
 
 import Copilot.Core
-import Copilot.Compile.C99.Util
+import Copilot.Compile.C99.Util (excpyname)
 
 -- | Representation of external variables.
 data External = forall a. External
@@ -44,11 +44,11 @@ gatherexts streams triggers = streamsexts `extunion` triggersexts
     uexprexts (UExpr _ expr) = exprexts expr
 
     exprexts :: Expr a -> [External]
-    exprexts expr = let rec = exprexts in case expr of
-      Local _ _ _ e1 e2   -> rec e1 `extunion` rec e2
-      ExternVar ty name _ -> [External name (excpyname name) ty]
-      Op1 _ e             -> rec e
-      Op2 _ e1 e2         -> rec e1 `extunion` rec e2
-      Op3 _ e1 e2 e3      -> rec e1 `extunion` rec e2 `extunion` rec e3
-      Label _ _ e         -> rec e
-      _                   -> []
+    exprexts (Local _ _ _ e1 e2)   -> exprexts e1 `extunion` exprexts e2
+    exprexts (ExternVar ty name _) -> [External name (excpyname name) ty]
+    exprexts (Op1 _ e)             -> exprexts e
+    exprexts (Op2 _ e1 e2)         -> exprexts e1 `extunion` exprexts e2
+    exprexts (Op3 _ e1 e2 e3)      -> exprexts e1 `extunion` exprexts e2
+                                        `extunion` exprexts e3
+    exprexts (Label _ _ e)         -> exprexts e
+    exprexts _                     -> []
