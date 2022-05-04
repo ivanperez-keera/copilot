@@ -44,11 +44,11 @@ gatherexts streams triggers = streamsexts `extunion` triggersexts
     uexprexts (UExpr _ expr) = exprexts expr
 
     exprexts :: Expr a -> [External]
-    exprexts (Local _ _ _ e1 e2)   -> exprexts e1 `extunion` exprexts e2
-    exprexts (ExternVar ty name _) -> [External name (excpyname name) ty]
-    exprexts (Op1 _ e)             -> exprexts e
-    exprexts (Op2 _ e1 e2)         -> exprexts e1 `extunion` exprexts e2
-    exprexts (Op3 _ e1 e2 e3)      -> exprexts e1 `extunion` exprexts e2
-                                        `extunion` exprexts e3
-    exprexts (Label _ _ e)         -> exprexts e
-    exprexts _                     -> []
+    exprexts (Local _ _ _ e1 e2)   = exprexts e1 `extunion` exprexts e2
+    exprexts (ExternVar ty name _) = [External name (excpyname name) ty]
+    exprexts (Op1 _ e)             = exprexts e
+    exprexts (Op2 _ e1 e2)         = exprexts e1 `extunion` exprexts e2
+    exprexts (Op3 _ e1 e2 e3)      = exprexts e1 `extunion` exprexts e2
+                                       `extunion` exprexts e3
+    exprexts (Label _ _ e)         = exprexts e
+    exprexts _                     = []
