@@ -1,6 +1,16 @@
 -- | Create Copilot executables that generate code or interpret streams and
 -- print the results to stdout.
-module Language.Copilot.Main ( copilotMain, defaultMain ) where
+module Language.Copilot.Main
+    (
+      -- * Types
+      Compiler
+    , Interpreter
+    , Printer
+      -- * Main entry points
+    , copilotMain
+    , defaultMain
+    )
+  where
 
 import qualified Copilot.Core as C (Spec)
 import Copilot.Language (interpret, prettyPrint)

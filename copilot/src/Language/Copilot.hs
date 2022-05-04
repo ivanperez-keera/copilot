@@ -19,6 +19,9 @@ module Language.Copilot
 
   , copilotMain
   , defaultMain
+  , Compiler
+  , Interpreter
+  , Printer
   ) where
 
 import Copilot.Language
