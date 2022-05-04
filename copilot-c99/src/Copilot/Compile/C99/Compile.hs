@@ -71,13 +71,19 @@ compile = compileWith mkDefaultCSettings
 compilec :: CSettings -> Spec -> C.TransUnit
 compilec cSettings spec = C.TransUnit declns funs
   where
+    declns = concat [ mkstructdeclns exprs
+                    , mkexts exts
+                    , mkglobals streams
+                    ]
+
+    funs   = concat [ genfuns streams triggers
+                    , [mkstep cSettings streams triggers exts]
+                    ]
+
     streams  = specStreams spec
     triggers = specTriggers spec
     exts     = gatherexts streams triggers
     exprs    = gatherexprs streams triggers
-
-    declns = mkstructdeclns exprs ++ mkexts exts ++ mkglobals streams
-    funs   = genfuns streams triggers ++ [mkstep cSettings streams triggers exts]
 
     -- Write struct datatypes
     mkstructdeclns :: [UExpr] -> [C.Decln]
@@ -126,31 +132,32 @@ compilec cSettings spec = C.TransUnit declns funs
 compileh :: CSettings -> Spec -> C.TransUnit
 compileh cSettings spec = C.TransUnit declns []
   where
+    declns = concat [ mkstructforwdeclns exprs
+                    , mkexts exts
+                    , extfundeclns triggers
+                    , [stepdecln]
+                    ]
+
     streams  = specStreams spec
     triggers = specTriggers spec
     exts     = gatherexts streams triggers
     exprs    = gatherexprs streams triggers
 
-    declns =  mkstructforwdeclns exprs
-           ++ mkexts exts
-           ++ extfundeclns triggers
-           ++ [stepdecln]
-
     mkstructforwdeclns :: [UExpr] -> [C.Decln]
     mkstructforwdeclns es = catMaybes $ map mkdecln utypes
       where
+        utypes = nub $ concatMap (\(UExpr _ e) -> exprtypes e) es
+
         mkdecln (UType ty) = case ty of
           Struct x -> Just $ mkstructforwdecln ty
           _        -> Nothing
-
-        utypes = nub $ concatMap (\(UExpr _ e) -> exprtypes e) es
 
     -- Make declarations for external variables.
     mkexts :: [External] -> [C.Decln]
     mkexts = map mkextdecln
 
     extfundeclns :: [Trigger] -> [C.Decln]
-    extfundeclns triggers = map extfundecln triggers
+    extfundeclns = map extfundecln
       where
         extfundecln :: Trigger -> C.Decln
         extfundecln (Trigger name _ args) = C.FunDecln Nothing cty name params
