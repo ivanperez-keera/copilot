@@ -6,7 +6,7 @@ module Copilot.Compile.C99.Compile
 
 import Text.PrettyPrint     (render)
 import Data.List            (nub)
-import Data.Maybe           (catMaybes)
+import Data.Maybe           (mapMaybe)
 import System.Directory     (createDirectoryIfMissing)
 import System.Exit          (exitFailure)
 import System.FilePath      ((</>))
@@ -87,7 +87,7 @@ compilec cSettings spec = C.TransUnit declns funs
 
     -- Write struct datatypes
     mkstructdeclns :: [UExpr] -> [C.Decln]
-    mkstructdeclns es = catMaybes $ map mkdecln utypes
+    mkstructdeclns es = mapMaybe mkdecln utypes
       where
         mkdecln (UType ty) = case ty of
           Struct x -> Just $ mkstructdecln ty
@@ -144,7 +144,7 @@ compileh cSettings spec = C.TransUnit declns []
     exprs    = gatherexprs streams triggers
 
     mkstructforwdeclns :: [UExpr] -> [C.Decln]
-    mkstructforwdeclns es = catMaybes $ map mkdecln utypes
+    mkstructforwdeclns es = mapMaybe mkdecln utypes
       where
         utypes = nub $ concatMap (\(UExpr _ e) -> exprtypes e) es
 
