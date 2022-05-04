@@ -125,8 +125,8 @@ compilec cSettings spec = C.TransUnit declns funs
             guarddef = genfun (guardname name) guard Bool
             argdefs  = zipWith arggen (argnames name) args
 
-            arggen :: (String, UExpr) -> C.FunDef
-            arggen (argname, UExpr ty expr) = genfun argname expr ty
+            arggen :: String -> UExpr -> C.FunDef
+            arggen argname (UExpr ty expr) = genfun argname expr ty
 
 -- | Generate the .h file from a 'Spec'.
 compileh :: CSettings -> Spec -> C.TransUnit
@@ -164,7 +164,7 @@ compileh cSettings spec = C.TransUnit declns []
           where
             cty    = C.TypeSpec C.Void
             params = zipWith mkparam (argnames name) args
-            mkparam (name, UExpr ty _) = C.Param (mkParamTy ty) name
+            mkparam (name, UExpr ty _) = C.Param (transtype ty) name
 
             -- Special case for Struct, to pass struct arguments by reference.
             -- Arrays are also passed by reference, but using C's array type
