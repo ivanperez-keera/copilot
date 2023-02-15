@@ -79,6 +79,7 @@ test-suite unit-tests
     , test-framework
     , test-framework-hunit
     , test-framework-quickcheck2
+    , unix
 
     , copilot-core
     , copilot-c99

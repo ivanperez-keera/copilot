@@ -2,15 +2,24 @@
 module Test.Copilot.Compile.C99 where
 
 -- External imports
+import Control.Exception                    (IOException, catch)
+import System.Directory                     (doesFileExist,
+                                             getTemporaryDirectory,
+                                             removeDirectory, removeFile,
+                                             setCurrentDirectory)
+import System.IO                            (hPutStrLn, stderr)
+import System.Posix.Temp                    (mkdtemp)
+import System.Process                       (callProcess)
 import Test.Framework                       (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck                      (Gen, Property, elements,
-                                             forAllBlind, shuffle, (==>), ioProperty, (===))
+                                             forAllBlind, ioProperty, shuffle,
+                                             (===), (==>))
 
-import System.Directory (setCurrentDirectory, removeFile, getTemporaryDirectory, setCurrentDirectory)
-import System.Process (callProcess)
-
+-- External imports: Copilot
 import Copilot.Core hiding (Property)
+
+-- External imports: Modules being tested
 import Copilot.Compile.C99
 
 -- | All unit tests for copilot-core:Copilot.Core.Type.
@@ -25,15 +34,30 @@ tests =
 -- | Test compile.
 testCompile :: Property
 testCompile = ioProperty $ do
-    dir <- getTemporaryDirectory
-    setCurrentDirectory dir
+    tmpDir <- getTemporaryDirectory
+    setCurrentDirectory tmpDir
+
+    testDir <- mkdtemp "copilot_test_"
+    setCurrentDirectory testDir
+
     compile "copilot_test" spec
-    -- compileC "copilot_test"
-    -- removeFile "copilot_test.c"
-    -- removeFile "copilot_test.h"
-    -- removeFile "copilot_test_types.h"
-    return $ True === True
+    r <- compileC "copilot_test"
+
+    -- Remove file produced by GCC
+    removeFile "copilot_test.o"
+
+    -- Remove files produced by Copilot
+    removeFile "copilot_test.c"
+    removeFile "copilot_test.h"
+    removeFile "copilot_test_types.h"
+
+    setCurrentDirectory tmpDir
+    removeDirectory testDir
+
+    return r
+
   where
+
     spec = Spec streams observers triggers properties
 
     streams    = [ Stream 0 [1] (Const Int8 1) Int8]
@@ -41,16 +65,29 @@ testCompile = ioProperty $ do
     triggers   = [ Trigger function guard args ]
     properties = []
 
-    function = "void"
+    function = "func"
 
     guard = Const Bool True
     -- guard = (Op2 (Eq Int8) (Drop Int8 0 0) (Const Int8 2))
 
     args = []
 
-compileC :: String -> IO ()
+compileC :: String -> IO Bool
 compileC specName = do
-  callProcess "gcc" [ "-c", "copilot_test.c" ]
+  result <- catch (do callProcess "gcc" [ "-c", specName ++ ".c" ]
+                      return True
+                  )
+                  (\e -> do
+                     hPutStrLn stderr $
+                       "copilot-c99: error: compileC: cannot compile "
+                         ++ specName ++ ".c with gcc"
+                     hPutStrLn stderr $
+                       "copilot-c99: exception: " ++ show (e :: IOException)
+                     return False
+                  )
+  if result
+    then doesFileExist $ specName ++ ".o"
+    else return False
 
 -- -- | Test compile.
 -- testCompileCustomDir :: Property
