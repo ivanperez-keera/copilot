@@ -27,7 +27,7 @@ tests :: Test.Framework.Test
 tests =
   testGroup "Copilot.Compile.C99"
     [ testProperty "Can compile specification"               testCompile
---    , testProperty "Can compile specification in custom dir" testCompile
+    , testProperty "Can compile specification in custom dir" testCompileCustomDir
 --    , testProperty "Compiling ID works correctly"            testId
     ]
 
@@ -89,15 +89,50 @@ compileC specName = do
     then doesFileExist $ specName ++ ".o"
     else return False
 
--- -- | Test compile.
--- testCompileCustomDir :: Property
--- testCompileCustomDir = do
---   dir <- getTempDir
---   compileInDirectory dir spec
---   compileCInDirectory dir specName
---   removeGeneratedFiles specName
---   remove generated files
---
+-- | Test compile.
+testCompileCustomDir :: Property
+testCompileCustomDir = ioProperty $ do
+    tmpDir <- getTemporaryDirectory
+    setCurrentDirectory tmpDir
+
+    testDir <- mkdtemp "copilot_test_"
+
+    compileWith (mkDefaultCSettings { cSettingsOutputDirectory = testDir })
+                "copilot_test"
+                spec
+
+    setCurrentDirectory testDir
+    r <- compileC "copilot_test"
+
+    -- Remove file produced by GCC
+    removeFile "copilot_test.o"
+
+    -- Remove files produced by Copilot
+    removeFile "copilot_test.c"
+    removeFile "copilot_test.h"
+    removeFile "copilot_test_types.h"
+
+    setCurrentDirectory tmpDir
+    removeDirectory testDir
+
+    return r
+
+  where
+
+    spec = Spec streams observers triggers properties
+
+    streams    = [ Stream 0 [1] (Const Int8 1) Int8]
+    observers  = []
+    triggers   = [ Trigger function guard args ]
+    properties = []
+
+    function = "func"
+
+    guard = Const Bool True
+    -- guard = (Op2 (Eq Int8) (Drop Int8 0 0) (Const Int8 2))
+
+    args = []
+
 -- -- | Test id.
 -- testId :: Property
 -- testId = do
