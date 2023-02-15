@@ -72,23 +72,6 @@ testCompile = ioProperty $ do
 
     args = []
 
-compileC :: String -> IO Bool
-compileC specName = do
-  result <- catch (do callProcess "gcc" [ "-c", specName ++ ".c" ]
-                      return True
-                  )
-                  (\e -> do
-                     hPutStrLn stderr $
-                       "copilot-c99: error: compileC: cannot compile "
-                         ++ specName ++ ".c with gcc"
-                     hPutStrLn stderr $
-                       "copilot-c99: exception: " ++ show (e :: IOException)
-                     return False
-                  )
-  if result
-    then doesFileExist $ specName ++ ".o"
-    else return False
-
 -- | Test compile.
 testCompileCustomDir :: Property
 testCompileCustomDir = ioProperty $ do
@@ -206,3 +189,23 @@ testCompileCustomDir = ioProperty $ do
 --     else if p is dead
 --            then return False
 --            else runAndCompareLoop p ps
+
+-- * Auxiliary functions
+
+-- | Compile a C file given its basename.
+compileC :: String -> IO Bool
+compileC baseName = do
+  result <- catch (do callProcess "gcc" [ "-c", baseName ++ ".c" ]
+                      return True
+                  )
+                  (\e -> do
+                     hPutStrLn stderr $
+                       "copilot-c99: error: compileC: cannot compile "
+                         ++ baseName ++ ".c with gcc"
+                     hPutStrLn stderr $
+                       "copilot-c99: exception: " ++ show (e :: IOException)
+                     return False
+                  )
+  if result
+    then doesFileExist $ baseName ++ ".o"
+    else return False
