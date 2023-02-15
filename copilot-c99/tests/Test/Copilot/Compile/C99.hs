@@ -28,6 +28,7 @@ tests =
   testGroup "Copilot.Compile.C99"
     [ testProperty "Can compile specification"               testCompile
     , testProperty "Can compile specification in custom dir" testCompileCustomDir
+    , testProperty "Can compile and run specification"       testCompileAndRun
 --    , testProperty "Compiling ID works correctly"            testId
     ]
 
@@ -109,7 +110,69 @@ testCompileCustomDir = ioProperty $ do
     triggers   = [ Trigger function guard args ]
     properties = []
 
-    function = "func"
+    function = "nop"
+
+    guard = Const Bool True
+    -- guard = (Op2 (Eq Int8) (Drop Int8 0 0) (Const Int8 2))
+
+    args = []
+
+-- | Test compile.
+testCompileAndRun :: Property
+testCompileAndRun = ioProperty $ do
+    tmpDir <- getTemporaryDirectory
+    setCurrentDirectory tmpDir
+
+    testDir <- mkdtemp "copilot_test_"
+    setCurrentDirectory testDir
+
+    compile "copilot_test" spec
+    r <- compileC "copilot_test"
+
+    let cProgram = unlines
+          [ "#include \"copilot_test.h\""
+          , ""
+          , "void nop () {"
+          , "}"
+          , ""
+          , "void main () {"
+          , "  step();"
+          , "}"
+          ]
+
+    writeFile "main.c" cProgram
+
+    -- Compile a main program
+    r2 <- compileExecutable "main" [ "copilot_test.o" ]
+    callProcess "./main" []
+
+    -- Remove file produced by GCC
+    removeFile "copilot_test.o"
+    removeFile "main"
+
+    -- Remove files produced "by hand"
+    removeFile "main.c"
+
+    -- Remove files produced by Copilot
+    removeFile "copilot_test.c"
+    removeFile "copilot_test.h"
+    removeFile "copilot_test_types.h"
+
+    setCurrentDirectory tmpDir
+    removeDirectory testDir
+
+    return $ r && r2
+
+  where
+
+    spec = Spec streams observers triggers properties
+
+    streams    = [ Stream 0 [1] (Const Int8 1) Int8]
+    observers  = []
+    triggers   = [ Trigger function guard args ]
+    properties = []
+
+    function = "nop"
 
     guard = Const Bool True
     -- guard = (Op2 (Eq Int8) (Drop Int8 0 0) (Const Int8 2))
@@ -208,4 +271,25 @@ compileC baseName = do
                   )
   if result
     then doesFileExist $ baseName ++ ".o"
+    else return False
+
+-- | Compile a C file into an executable, given its basename and files to link
+-- with it.
+compileExecutable :: String -> [String] -> IO Bool
+compileExecutable baseName linked = do
+  result <- catch (do callProcess "gcc" $ [ baseName ++ ".c" ]
+                                          ++ linked
+                                          ++ [ "-o", baseName ]
+                      return True
+                  )
+                  (\e -> do
+                     hPutStrLn stderr $
+                       "copilot-c99: error: compileExecutable: cannot compile "
+                         ++ baseName ++ ".c with gcc"
+                     hPutStrLn stderr $
+                       "copilot-c99: exception: " ++ show (e :: IOException)
+                     return False
+                  )
+  if result
+    then doesFileExist baseName
     else return False
