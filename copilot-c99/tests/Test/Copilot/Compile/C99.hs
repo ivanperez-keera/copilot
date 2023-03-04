@@ -213,19 +213,7 @@ testRunCompareArg :: (Read b, Eq b)
                   -> (String, String)
                   -> String
                   -> Property
-testRunCompareArg inputs nums copilotUExpr outputVar name = do
-  let (cTypeRes, cStr) = outputVar
-
-  let numSteps      = length nums
-      maxInputsName = "MAX_STEPS"
-
-  let vars = map oneInput inputs
-      oneInput (cTypeInput, inputVals, cInputName) =
-          (cTypeInput, inputVarName, inputArrVarName, inputVals)
-        where
-          inputVarName    = cInputName
-          inputArrVarName = cInputName ++ "_s"
-
+testRunCompareArg inputs nums copilotUExpr outputVar name =
   ioProperty $ do
     tmpDir <- getTemporaryDirectory
     setCurrentDirectory tmpDir
@@ -233,7 +221,7 @@ testRunCompareArg inputs nums copilotUExpr outputVar name = do
     testDir <- mkdtemp "copilot_test_"
     setCurrentDirectory testDir
 
-    let cProgram = testRunCompareArgCProgram inputs nums copilotUExpr outputVar name
+    let cProgram = testRunCompareArgCProgram inputs (length nums) outputVar
 
     let spec = Spec streams observers triggers properties
 
@@ -281,58 +269,68 @@ testRunCompareArg inputs nums copilotUExpr outputVar name = do
 
     return $ r && r2 && comparison
 
-testRunCompareArgCProgram ::  (Read b, Eq b)
-                          => [(String, [String], String)]
-                          -> [b]
-                          -> UExpr
+testRunCompareArgCProgram :: [(String, [String], String)]
+                          -> Int
                           -> (String, String)
                           -> String
-                          -> Property
-testRunCompareArgCProgram inputs nums copilotUExpr outputVar name =
-    let varDecls :: [String]
-        varDecls =
-          [ "int " ++ maxInputsName ++ " = " ++ show numSteps ++ ";" ]
-          ++ inputVarDecls
+testRunCompareArgCProgram inputs numSteps outputVar =
+    cProgram
+  where
 
-        inputVarDecls :: [String]
-        inputVarDecls = concatMap (\(ctype, varName, arrVar, arrVals) ->
-          let inputsStr = concat $ intersperse ", " (arrVals :: [String]) in
-          [ ctype ++ " " ++ arrVar ++ "[] = {" ++ inputsStr ++ "};"
-          , ""
-          , ctype ++ " " ++ varName ++ ";"
-          ])
-          vars
+    cProgram = unlines $
+      [ "#include <stdio.h>"
+      , "#include <stdint.h>"
+      , "#include \"copilot_test.h\""
+      , ""
+      ]
+      ++ varDecls ++
+      [ ""
+      , "void printBack (" ++ cTypeRes ++ " num) {"
+      , "  printf(\"" ++ cStr ++ "\\n\", num);"
+      , "}"
+      , ""
+      , "int main () {"
+      , "  int i = 0;"
+      , "  for (i = 0; i < " ++ maxInputsName ++ "; i++) {"
+      ]
+      ++ inputUpdates ++
+      [ ""
+      , "    step();"
+      , "  }"
+      , "  return 0;"
+      , "}"
+      ]
 
-        inputUpdates :: [String]
-        inputUpdates = concatMap (\(ctype, varName, arrVar, arrVals) ->
-          [ "    " ++ varName ++ " = " ++ arrVar ++ "[i];"
-          ])
-          vars
+    varDecls :: [String]
+    varDecls =
+      [ "int " ++ maxInputsName ++ " = " ++ show numSteps ++ ";" ]
+      ++ inputVarDecls
 
-    let cProgram = unlines $
-          [ "#include <stdio.h>"
-          , "#include <stdint.h>"
-          , "#include \"copilot_test.h\""
-          , ""
-          ]
-          ++ varDecls ++
-          [ ""
-          , "void printBack (" ++ cTypeRes ++ " num) {"
-          , "  printf(\"" ++ cStr ++ "\\n\", num);"
-          , "}"
-          , ""
-          , "int main () {"
-          , "  int i = 0;"
-          , "  for (i = 0; i < " ++ maxInputsName ++ "; i++) {"
-          ]
-          ++ inputUpdates ++
-          [ ""
-          , "    step();"
-          , "  }"
-          , "  return 0;"
-          , "}"
-          ]
-    in cProgram
+    inputVarDecls :: [String]
+    inputVarDecls = concatMap (\(ctype, varName, arrVar, arrVals) ->
+      let inputsStr = concat $ intersperse ", " (arrVals :: [String]) in
+      [ ctype ++ " " ++ arrVar ++ "[] = {" ++ inputsStr ++ "};"
+      , ""
+      , ctype ++ " " ++ varName ++ ";"
+      ])
+      vars
+
+    inputUpdates :: [String]
+    inputUpdates = concatMap (\(ctype, varName, arrVar, arrVals) ->
+      [ "    " ++ varName ++ " = " ++ arrVar ++ "[i];"
+      ])
+      vars
+
+    (cTypeRes, cStr) = outputVar
+
+    vars = map oneInput inputs
+    oneInput (cTypeInput, inputVals, cInputName) =
+        (cTypeInput, inputVarName, inputArrVarName, inputVals)
+      where
+        inputVarName    = cInputName
+        inputArrVarName = cInputName ++ "_s"
+
+    maxInputsName = "MAX_STEPS"
 
 opsInt8 :: Gen (Wrapper Int8 Int8)
 opsInt8 = elements
