@@ -186,7 +186,7 @@ testRunCompare :: Property
 testRunCompare = testRunCompare' opsInt8
            .&&.  testRunCompare' opsInt16
 
-testRunCompare' :: (Show a, Read b, Eq b) => Gen (Wrapper a b) -> Property
+testRunCompare' :: Gen Wrapper -> Property
 testRunCompare' ops =
   forAllBlind ops $ \testCase ->
     let (Wrapper copilotUExpr haskellFun inputVar outputVar name) = testCase
@@ -319,7 +319,7 @@ f inputs nums copilotUExpr haskellFun outputVar name = do
 
           return $ r && r2 && comparison
 
-opsInt8 :: Gen (Wrapper Int8 Int8)
+opsInt8 :: Gen Wrapper
 opsInt8 = elements
   [ Wrapper
       ( UExpr Int8 (Op2 (Add Int8) (ExternVar Int8 "input" Nothing) (Const Int8 1)) )
@@ -336,7 +336,7 @@ opsInt8 = elements
       ( "identity" )
   ]
 
-opsInt16 :: Gen (Wrapper Int16 Int16)
+opsInt16 :: Gen Wrapper
 opsInt16 = elements
   [ Wrapper
       ( UExpr Int16 (Op2 (Add Int16) (ExternVar Int16 "input" Nothing) (Const Int16 1)) )
@@ -352,7 +352,7 @@ opsInt16 = elements
       ( "minusOne" )
   ]
 
-data Wrapper a b = Wrapper
+data Wrapper = forall a b . (Read a, Show b, Eq b) => Wrapper
   { wrapExpr   :: UExpr
   , wrapFun    :: a -> b
   , wrapCopInp :: (String, Gen a, String)
