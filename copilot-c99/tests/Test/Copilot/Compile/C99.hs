@@ -34,7 +34,7 @@ tests =
     [ testProperty "Can compile specification"               testCompile
     , testProperty "Can compile specification in custom dir" testCompileCustomDir
     , testProperty "Can compile and run specification"       testCompileAndRun
-    , testProperty "Compiling plusOne works correctly"       testPlusOne
+    , testProperty "Compiling plusOne works correctly"       testRunCompare
     ]
 
 -- | Test compile.
@@ -181,13 +181,13 @@ testCompileAndRun = ioProperty $ do
 
     args = []
 
--- | Test id.
-testPlusOne :: Property
-testPlusOne = testPlusOne' opsInt8
-        .&&.  testPlusOne' opsInt16
+-- | Test running a compiled C program and comparing the results.
+testRunCompare :: Property
+testRunCompare = testRunCompare' opsInt8
+           .&&.  testRunCompare' opsInt16
 
-testPlusOne' :: (Show a, Read b, Eq b) => Gen (Wrapper a b) -> Property
-testPlusOne' ops =
+testRunCompare' :: (Show a, Read b, Eq b) => Gen (Wrapper a b) -> Property
+testRunCompare' ops =
   forAllBlind ops $ \testCase ->
     let (Wrapper copilotUExpr haskellFun inputVar outputVar name) = testCase
         (cTypeInput, gen, cInputName) = inputVar
