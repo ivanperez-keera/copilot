@@ -193,7 +193,9 @@ testRunCompare' ops =
         (cTypeInput, gen, cInputName) = inputVar
         (cTypeRes, cStr) = outputVar
     in
-      forAll (listOf gen) $ \nums -> do
+      forAll (listOf gen) $ \nums -> do f
+
+f =
 
         let inputs = [ (cTypeInput, fmap show nums, cInputName) ]
 
