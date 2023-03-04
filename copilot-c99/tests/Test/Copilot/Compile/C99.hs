@@ -3,13 +3,14 @@ module Test.Copilot.Compile.C99 where
 
 -- External imports
 import Control.Exception                    (IOException, catch)
+import Data.List                            (intersperse)
 import System.Directory                     (doesFileExist,
                                              getTemporaryDirectory,
                                              removeDirectory, removeFile,
                                              setCurrentDirectory)
 import System.IO                            (hPutStrLn, stderr)
 import System.Posix.Temp                    (mkdtemp)
-import System.Process                       (callProcess)
+import System.Process                       (callProcess, readProcess)
 import Test.Framework                       (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck                      (Gen, Property, elements,
@@ -29,7 +30,7 @@ tests =
     [ testProperty "Can compile specification"               testCompile
     , testProperty "Can compile specification in custom dir" testCompileCustomDir
     , testProperty "Can compile and run specification"       testCompileAndRun
---    , testProperty "Compiling ID works correctly"            testId
+    , testProperty "Compiling plusOne works correctly"       testPlusOne
     ]
 
 -- | Test compile.
@@ -179,13 +180,95 @@ testCompileAndRun = ioProperty $ do
 
     args = []
 
--- -- | Test id.
--- testId :: Property
--- testId = do
---   dir <- getTempDir
---   compileInDirectory dir spec
---   compileCInDirectory dir specName
---   runAndCompare program (zip stream expected)
+-- | Test id.
+testPlusOne :: Property
+testPlusOne = ioProperty $ do
+    tmpDir <- getTemporaryDirectory
+    setCurrentDirectory tmpDir
+
+    testDir <- mkdtemp "copilot_test_"
+    setCurrentDirectory testDir
+
+    compile "copilot_test" spec
+    r <- compileC "copilot_test"
+
+    let cProgram = unlines
+          [ "#include <stdio.h>"
+          , "#include <stdint.h>"
+          , "#include \"copilot_test.h\""
+          , ""
+          , "int NUM_INPUTS = " ++ numInputsStr ++ ";"
+          , "int8_t inputs[] = {" ++ inputsStr ++ "};"
+          , ""
+          , "int8_t input = 0;"
+          , ""
+          , "void printBack (int8_t num) {"
+          , "  printf(\"%d\\n\", num);"
+          , "}"
+          , ""
+          , "int main () {"
+          , "  int i = 0;"
+          , "  for (i = 0; i < NUM_INPUTS; i++) {"
+          , "    input = inputs[i];"
+          , "    step();"
+          , "  }"
+          , "  return 0;"
+          , "}"
+          ]
+
+    writeFile "main.c" cProgram
+
+    -- Compile a main program
+    r2 <- compileExecutable "main" [ "copilot_test.o" ]
+
+    print r2
+    print testDir
+
+    out <- readProcess "./main" [] ""
+
+    let ls   = lines out
+        nums = fmap read ls
+
+        comparison = nums == fmap (+1) input
+
+    -- Remove file produced by GCC
+    removeFile "copilot_test.o"
+    removeFile "main"
+
+    -- Remove files produced "by hand"
+    removeFile "main.c"
+
+    -- Remove files produced by Copilot
+    removeFile "copilot_test.c"
+    removeFile "copilot_test.h"
+    removeFile "copilot_test_types.h"
+
+    setCurrentDirectory tmpDir
+    removeDirectory testDir
+
+    return $ r && r2 && comparison
+
+  where
+
+    numInputsStr = show numInputs
+    numInputs    = 10
+
+    inputsStr = concat $ intersperse ", " $ fmap show input
+
+    input = [1..10]
+
+    spec = Spec streams observers triggers properties
+
+    streams    = []
+    observers  = []
+    triggers   = [ Trigger function guard args ]
+    properties = []
+
+    function = "printBack"
+
+    guard = Const Bool True
+
+    args = [UExpr Int8 (Op2 (Add Int8) (ExternVar Int8 "input" Nothing) (Const Int8 1))]
 
 -- -- | Test Op1.
 -- testOp1 :: Property
