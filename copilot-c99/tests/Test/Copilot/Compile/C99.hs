@@ -74,7 +74,6 @@ testCompile = ioProperty $ do
     function = "func"
 
     guard = Const Bool True
-    -- guard = (Op2 (Eq Int8) (Drop Int8 0 0) (Const Int8 2))
 
     args = []
 
@@ -118,7 +117,6 @@ testCompileCustomDir = ioProperty $ do
     function = "nop"
 
     guard = Const Bool True
-    -- guard = (Op2 (Eq Int8) (Drop Int8 0 0) (Const Int8 2))
 
     args = []
 
@@ -180,7 +178,6 @@ testCompileAndRun = ioProperty $ do
     function = "nop"
 
     guard = Const Bool True
-    -- guard = (Op2 (Eq Int8) (Drop Int8 0 0) (Const Int8 2))
 
     args = []
 
@@ -189,221 +186,169 @@ testPlusOne :: Property
 testPlusOne = testPlusOne' opsInt8
         .&&.  testPlusOne' opsInt16
 
-testPlusOne' :: (Show a, Read b, Eq b) => [Wrapper a b] -> Property
+testPlusOne' :: (Show a, Read b, Eq b) => Gen (Wrapper a b) -> Property
 testPlusOne' ops =
-  forAllBlind (elements ops) $ \testCase ->
-  let (Wrapper copilotUExpr haskellFunction copTypeInput copTypeOut cTypeInput cTypeRes cStr name gen) = testCase
-  in
-    forAll (listOf gen) $ \nums ->
-      ioProperty $ do
+  forAllBlind ops $ \testCase ->
+    let (Wrapper copilotUExpr haskellFun inputVar outputVar name) = testCase
+        (cTypeInput, gen, cInputName) = inputVar
+        (cTypeRes, cStr) = outputVar
+    in
+      forAll (listOf gen) $ \nums -> do
 
-        tmpDir <- getTemporaryDirectory
-        setCurrentDirectory tmpDir
+        let inputs = [ (cTypeInput, fmap show nums, cInputName) ]
 
-        testDir <- mkdtemp "copilot_test_"
-        setCurrentDirectory testDir
+        let numSteps      = length nums
+            maxInputsName = "MAX_STEPS"
 
-        hPutStrLn stderr $ "Testing\t" ++ name ++ " :: " ++ cTypeInput ++ " -> " ++ cTypeRes ++ "\t with inputs: " ++ show nums
+        let vars = map oneInput inputs
+            oneInput (cTypeInput, inputVals, cInputName) =
+                (cTypeInput, inputVarName, inputArrVarName, inputVals)
+              where
+                inputVarName    = cInputName
+                inputArrVarName = cInputName ++ "_s"
 
-        let spec = Spec streams observers triggers properties
+        ioProperty $ do
 
-            streams    = []
-            observers  = []
-            properties = []
+          tmpDir <- getTemporaryDirectory
+          setCurrentDirectory tmpDir
 
-            triggers = [ Trigger function guard args ]
-            function = "printBack"
-            guard    = Const Bool True
-            args     = [copilotUExpr]
+          testDir <- mkdtemp "copilot_test_"
+          setCurrentDirectory testDir
 
-        compile "copilot_test" spec
-        r <- compileC "copilot_test"
+          hPutStrLn stderr $ "Testing\t" ++ name ++
+                             " :: " ++ cTypeInput ++ " -> " ++ cTypeRes ++
+                             "\t with inputs: " ++ show nums
 
-        let inputsStr = concat $ intersperse ", " $ fmap show nums
+          let spec = Spec streams observers triggers properties
 
-        let cProgram = unlines
-              [ "#include <stdio.h>"
-              , "#include <stdint.h>"
-              , "#include \"copilot_test.h\""
-              , ""
-              , "int NUM_INPUTS = " ++ show (length nums) ++ ";"
-              , cTypeInput ++ " inputs[] = {" ++ inputsStr ++ "};"
-              , ""
-              , cTypeInput ++ " input = 0;"
-              , ""
-              , "void printBack (" ++ cTypeRes ++ " num) {"
-              , "  printf(\"" ++ cStr ++ "\\n\", num);"
-              , "}"
-              , ""
-              , "int main () {"
-              , "  int i = 0;"
-              , "  for (i = 0; i < NUM_INPUTS; i++) {"
-              , "    input = inputs[i];"
-              , "    step();"
-              , "  }"
-              , "  return 0;"
-              , "}"
-              ]
+              streams    = []
+              observers  = []
+              properties = []
 
-        writeFile "main.c" cProgram
+              triggers = [ Trigger function guard args ]
+              function = "printBack"
+              guard    = Const Bool True
+              args     = [copilotUExpr]
 
-        -- Compile a main program
-        r2 <- compileExecutable "main" [ "copilot_test.o" ]
+          compile "copilot_test" spec
+          r <- compileC "copilot_test"
 
-        print r2
-        print testDir
+          let varDecls :: [String]
+              varDecls =
+                [ "int " ++ maxInputsName ++ " = " ++ show numSteps ++ ";" ]
+                ++ inputVarDecls
 
-        out <- readProcess "./main" [] ""
+              inputVarDecls :: [String]
+              inputVarDecls = concatMap (\(ctype, varName, arrVar, arrVals) ->
+                let inputsStr = concat $ intersperse ", " (arrVals :: [String]) in
+                [ ctype ++ " " ++ arrVar ++ "[] = {" ++ inputsStr ++ "};"
+                , ""
+                , ctype ++ " " ++ varName ++ ";"
+                ])
+                vars
 
-        let ls   = lines out
-            outNums = fmap read ls
+              inputUpdates :: [String]
+              inputUpdates = concatMap (\(ctype, varName, arrVar, arrVals) ->
+                [ "    " ++ varName ++ " = " ++ arrVar ++ "[i];"
+                ])
+                vars
 
-            comparison = outNums == fmap haskellFunction nums
+          let cProgram = unlines $
+                [ "#include <stdio.h>"
+                , "#include <stdint.h>"
+                , "#include \"copilot_test.h\""
+                , ""
+                ]
+                ++ varDecls ++
+                [ ""
+                , "void printBack (" ++ cTypeRes ++ " num) {"
+                , "  printf(\"" ++ cStr ++ "\\n\", num);"
+                , "}"
+                , ""
+                , "int main () {"
+                , "  int i = 0;"
+                , "  for (i = 0; i < " ++ maxInputsName ++ "; i++) {"
+                ]
+                ++ inputUpdates ++
+                [ ""
+                , "    step();"
+                , "  }"
+                , "  return 0;"
+                , "}"
+                ]
 
-        -- Remove file produced by GCC
-        removeFile "copilot_test.o"
-        removeFile "main"
+          writeFile "main.c" cProgram
 
-        -- Remove files produced "by hand"
-        removeFile "main.c"
+          -- Compile a main program
+          r2 <- compileExecutable "main" [ "copilot_test.o" ]
 
-        -- Remove files produced by Copilot
-        removeFile "copilot_test.c"
-        removeFile "copilot_test.h"
-        removeFile "copilot_test_types.h"
+          print r2
+          print testDir
 
-        setCurrentDirectory tmpDir
-        removeDirectory testDir
+          out <- readProcess "./main" [] ""
 
-        return $ r && r2 && comparison
+          let ls   = lines out
+              outNums = fmap read ls
 
-  where
+              comparison = outNums == fmap haskellFun nums
 
-opsInt8 :: [ Wrapper Int8 Int8 ]
-opsInt8 =
+          -- Remove file produced by GCC
+          removeFile "copilot_test.o"
+          removeFile "main"
+
+          -- Remove files produced "by hand"
+          removeFile "main.c"
+
+          -- Remove files produced by Copilot
+          removeFile "copilot_test.c"
+          removeFile "copilot_test.h"
+          removeFile "copilot_test_types.h"
+
+          setCurrentDirectory tmpDir
+          removeDirectory testDir
+
+          return $ r && r2 && comparison
+
+opsInt8 :: Gen (Wrapper Int8 Int8)
+opsInt8 = elements
   [ Wrapper
       ( UExpr Int8 (Op2 (Add Int8) (ExternVar Int8 "input" Nothing) (Const Int8 1)) )
       ( (+1) :: Int8 -> Int8 )
-      ( CC.Int8 )
-      ( CC.Int8 )
-      ( "int8_t" )
-      ( "int8_t" )
-      ( "%d" )
+      ( "int8_t", arbInt8 (maxBound - 1, minBound), "input" )
+      ( "int8_t", "%d" )
       ( "plusOne" )
-      (arbInt8 (maxBound - 1, minBound))
+
   , Wrapper
       ( UExpr Int8 (ExternVar Int8 "input" Nothing) )
       ( id :: Int8 -> Int8 )
-      ( CC.Int8 )
-      ( CC.Int8 )
-      ( "int8_t" )
-      ( "int8_t" )
-      ( "%d" )
+      ( "int8_t", arbInt8 (maxBound - 1, minBound), "input")
+      ( "int8_t", "%d" )
       ( "identity" )
-      (arbInt8 (maxBound - 1, minBound))
   ]
 
-opsInt16 :: [ Wrapper Int16 Int16 ]
-opsInt16 =
+opsInt16 :: Gen (Wrapper Int16 Int16)
+opsInt16 = elements
   [ Wrapper
       ( UExpr Int16 (Op2 (Add Int16) (ExternVar Int16 "input" Nothing) (Const Int16 1)) )
       ( (+1) :: Int16 -> Int16 )
-      ( CC.Int16 )
-      ( CC.Int16 )
-      ( "int16_t" )
-      ( "int16_t" )
-      ( "%d" )
+      (  "int16_t", arbInt16 (maxBound - 1, minBound), "input")
+      (  "int16_t", "%d" )
       ( "plusOne" )
-      (arbInt16 (maxBound - 1, minBound))
   , Wrapper
       ( UExpr Int16 (Op2 (Sub Int16) (ExternVar Int16 "input" Nothing) (Const Int16 128)) )
       ( (\x -> x - 128) :: Int16 -> Int16 )
-      ( CC.Int16 )
-      ( CC.Int16 )
-      ( "int16_t" )
-      ( "int16_t" )
-      ( "%d" )
+      ( "int16_t", arbInt16 (maxBound, minBound + 128), "input")
+      ( "int16_t", "%d" )
       ( "minusOne" )
-      (arbInt16 (maxBound, minBound + 128))
   ]
 
 data Wrapper a b = Wrapper
   { wrapExpr   :: UExpr
   , wrapFun    :: a -> b
-  , wrapCopInp :: Type a
-  , wrapCopOut :: Type b
-  , wrapCInp   :: String
-  , wrapCOut   :: String
-  , wrapPat    :: String
+  , wrapCopInp :: (String, Gen a, String)
+  , wrapCopOut :: (String, String)
   , wrapName   :: String
-  , wrapGen    :: Gen a
   }
-
--- -- | Test Op1.
--- testOp1 :: Property
--- testOp1 = do
---   dir <- getTempDir
---   compileInDirectory dir spec
---   compileCInDirectory dir specName
---   runAndCompare program (zip stream expected)
---
--- -- | Test Op2.
--- testOp2 :: Property
--- testOp2 = do
---   dir <- getTempDir
---   compileInDirectory dir spec
---   compileCInDirectory dir specName
---   runAndCompare steps specName stream expected
---
--- -- | Test Op3.
--- testOp3 :: Property
--- testOp3 = do
---   dir <- getTempDir
---   compileInDirectory dir spec
---   compileCInDirectory dir specName
---   runAndCompare steps specName stream expected
---
--- -- | Test Op3.
--- testAppend :: Property
--- testAppend = do
---   dir <- getTempDir
---   compileInDirectory dir spec
---   compileCInDirectory dir specName
---   runAndCompare steps specName stream expected
---
--- -- | Test Delay.
--- testDelay :: Property
--- testDelay = do
---   dir <- getTempDir
---   compileInDirectory dir spec
---   compileCInDirectory dir specName
---   runAndCompare steps specName stream expected
-
--- -- | Run a program, feeding inputs to it and comparing the output to an expected
--- -- output.
--- runAndCompare :: (Show a, Read b)
---               => String           -- ^ Program
---               -> [(a, b)]         -- ^ Input and expected output
---               -> IO Bool
--- runAndCompare program pairs = do
---   p <- forkAndRun $ program
---   runAndCompareLoop p pairs
---
--- runAndCompareLoop => Process  -- ^ Process to which the input must be fed
---                   -> [(a, b)] -- ^ Input and output pairs
---                   -> IO Bool
--- runAndCompareLoop p [] = do
---   processIsAlive p
--- runAndCompareLoop p ((a, b):ps) = do
---   feed a to p
---   expectedOutput <- read output from p
---   check exit status of p
---   if output /= expected output
---     then kill p
---          return False
---     else if p is dead
---            then return False
---            else runAndCompareLoop p ps
 
 -- * Auxiliary functions
 
