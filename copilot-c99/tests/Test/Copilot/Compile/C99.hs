@@ -19,7 +19,7 @@ import Test.QuickCheck                      (Gen, Property, arbitrary, elements,
                                              forAll, forAllBlind, getPositive,
                                              ioProperty, vectorOf, (.&&.),
                                              (===), (==>))
-import Test.QuickCheck.Gen                  (chooseUpTo)
+import Test.QuickCheck.Gen                  (chooseUpTo, chooseBoundedIntegral)
 
 -- External imports: Copilot
 import Copilot.Core hiding (Property)
@@ -206,8 +206,8 @@ testRunCompare = testRunCompare1 opsInt8
 testRunCompare1 :: (Show a, Read b, Eq b) => Gen (TestCase a b) -> Property
 testRunCompare1 ops =
   forAllBlind ops $ \testCase ->
-    let (TestCase copilotUExpr haskellFun inputVar outputVar) = testCase
-        (cTypeInput, gen, cInputName) = inputVar
+    let (TestCase copilotSpec haskellFun inputVar outputVar) = testCase
+        (cTypeInput, cInputName, gen) = inputVar
 
     in forAll (getPositive <$> arbitrary) $ \len ->
 
@@ -216,7 +216,7 @@ testRunCompare1 ops =
          let inputs  = [ (cTypeInput, fmap show nums, cInputName) ]
              outputs = haskellFun nums
 
-         testRunCompareArg inputs len outputs copilotUExpr outputVar
+         testRunCompareArg inputs len outputs copilotSpec outputVar
 
 -- | Test running a compiled C program and comparing the results, when the
 -- program produces one output as an argument to a trigger that always fires.
@@ -230,10 +230,10 @@ testRunCompareArg :: (Read b, Eq b)
                   => [(String, [String], String)]
                   -> Int
                   -> [b]
-                  -> UExpr
+                  -> Spec
                   -> (String, String)
                   -> Property
-testRunCompareArg inputs numInputs nums copilotUExpr outputVar =
+testRunCompareArg inputs numInputs nums spec outputVar =
   ioProperty $ do
     tmpDir <- getTemporaryDirectory
     setCurrentDirectory tmpDir
@@ -243,7 +243,6 @@ testRunCompareArg inputs numInputs nums copilotUExpr outputVar =
     setCurrentDirectory testDir
 
     -- Produce copilot monitoring code
-    let spec = testRunCompareArgSpec copilotUExpr
     compile "copilot_test" spec
     r <- compileC "copilot_test"
 
@@ -282,22 +281,6 @@ testRunCompareArg inputs numInputs nums copilotUExpr outputVar =
       removeDirectory testDir
 
     return $ r && r2 && comparison
-
--- | Build a 'Spec' that triggers at every step, passing the given expression
--- as argument.
-testRunCompareArgSpec :: UExpr -> Spec
-testRunCompareArgSpec copilotUExpr =
-    Spec streams observers triggers properties
-  where
-
-    streams    = []
-    observers  = []
-    properties = []
-
-    triggers = [ Trigger function guard args ]
-    function = "printBack"
-    guard    = Const Bool True
-    args     = [copilotUExpr]
 
 -- | Return a wrapper C program that runs a loop for a number of iterations,
 -- putting values in global variables at every step, running the monitors, and
@@ -367,9 +350,9 @@ testRunCompareArgCProgram inputs numSteps outputVar = unlines $
 -- *** Wrap expression tested, equivalent Haskell function, and C information
 
 data TestCase a b = TestCase
-  { wrapExpr   :: UExpr
+  { wrapExpr   :: Spec
   , wrapFun    :: [a] -> [b]
-  , wrapCopInp :: (String, Gen a, String)
+  , wrapCopInp :: (String, String, Gen a)
   , wrapCopOut :: (String, String)
   }
 
@@ -378,216 +361,223 @@ data TestCase a b = TestCase
 opsInt8 :: Gen (TestCase Int8 Int8)
 opsInt8 = elements
   [ TestCase
-      ( UExpr Int8 (ExternVar Int8 "input" Nothing) )
+      ( alwaysTriggerArg1 $ UExpr Int8 (ExternVar Int8 "input" Nothing) )
       ( fmap id :: [Int8] -> [Int8])
-      ( "int8_t", arbToFrom (maxBound - 1, minBound), "input")
+      ( "int8_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "int8_t", "%d" )
 
   , TestCase
-      ( UExpr Int8 (Op2 (Add Int8) (ExternVar Int8 "input" Nothing) (Const Int8 1)) )
+      ( alwaysTriggerArg1 $ UExpr Int8 (Op2 (Add Int8) (ExternVar Int8 "input" Nothing) (Const Int8 1)) )
       ( fmap (+1) :: [Int8] -> [Int8] )
-      ( "int8_t", arbToFrom (maxBound - 1, minBound), "input" )
+      ( "int8_t", "input", chooseBoundedIntegral (minBound, maxBound - 1) )
       ( "int8_t", "%d" )
 
   , TestCase
-      ( UExpr Int8 (Op2 (Sub Int8) (ExternVar Int8 "input" Nothing) (Const Int8 64)) )
+      ( alwaysTriggerArg1 $ UExpr Int8 (Op2 (Sub Int8) (ExternVar Int8 "input" Nothing) (Const Int8 64)) )
       ( fmap (\x -> x - 64) :: [Int8] -> [Int8] )
-      ( "int8_t", arbToFrom (maxBound, minBound + 64), "input" )
+      ( "int8_t", "input", chooseBoundedIntegral (minBound + 64, maxBound) )
       ( "int8_t", "%d" )
 
   , TestCase
-      ( UExpr Int8 (Op2 (Sub Int8) (ExternVar Int8 "input" Nothing) (ExternVar Int8 "input" Nothing)) )
+      ( alwaysTriggerArg1 $ UExpr Int8 (Op2 (Sub Int8) (ExternVar Int8 "input" Nothing) (ExternVar Int8 "input" Nothing)) )
       ( fmap (const 0) :: [Int8] -> [Int8] )
-      ( "int8_t", arbToFrom (maxBound, minBound), "input" )
+      ( "int8_t", "input", chooseBoundedIntegral (minBound, maxBound) )
+      ( "int8_t", "%d" )
+
+  , TestCase
+      ( sometimesTriggerArg1 (Op2 (Eq Int8) (Op2 (Mod Int8) (ExternVar Int8 "input" Nothing) (Const Int8 2)) (Const Int8 0))
+                             (UExpr Int8 (ExternVar Int8 "input" Nothing)) )
+      ( filter even :: [Int8] -> [Int8])
+      ( "int8_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "int8_t", "%d" )
   ]
 
 opsInt16 :: Gen (TestCase Int16 Int16)
 opsInt16 = elements
   [ TestCase
-      ( UExpr Int16 (ExternVar Int16 "input" Nothing) )
-      ( fmap (id) :: [Int16] -> [Int16] )
-      ( "int16_t", arbToFrom (maxBound - 1, minBound), "input")
+      ( alwaysTriggerArg1 $ UExpr Int16 (ExternVar Int16 "input" Nothing) )
+      ( fmap id :: [Int16] -> [Int16] )
+      ( "int16_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "int16_t", "%d" )
 
   , TestCase
-      ( UExpr Int16 (Op2 (Add Int16) (ExternVar Int16 "input" Nothing) (Const Int16 1)) )
-      ( fmap ((+1)) :: [Int16] -> [Int16] )
-      ( "int16_t", arbToFrom (maxBound - 1, minBound), "input" )
+      ( alwaysTriggerArg1 $ UExpr Int16 (Op2 (Add Int16) (ExternVar Int16 "input" Nothing) (Const Int16 1)) )
+      ( fmap (+1) :: [Int16] -> [Int16] )
+      ( "int16_t", "input", chooseBoundedIntegral (minBound, maxBound - 1) )
       ( "int16_t", "%d" )
 
   , TestCase
-      ( UExpr Int16 (Op2 (Sub Int16) (ExternVar Int16 "input" Nothing) (Const Int16 128)) )
-      ( fmap ((\x -> x - 128)) :: [Int16] -> [Int16] )
-      ( "int16_t", arbToFrom (maxBound, minBound + 128), "input" )
+      ( alwaysTriggerArg1 $ UExpr Int16 (Op2 (Sub Int16) (ExternVar Int16 "input" Nothing) (Const Int16 128)) )
+      ( fmap (\x -> x - 128) :: [Int16] -> [Int16] )
+      ( "int16_t", "input", chooseBoundedIntegral (minBound + 128, maxBound) )
       ( "int16_t", "%d" )
 
   , TestCase
-      ( UExpr Int16 (Op2 (Sub Int16) (ExternVar Int16 "input" Nothing) (ExternVar Int16 "input" Nothing)) )
+      ( alwaysTriggerArg1 $ UExpr Int16 (Op2 (Sub Int16) (ExternVar Int16 "input" Nothing) (ExternVar Int16 "input" Nothing)) )
       ( fmap (const 0) :: [Int16] -> [Int16] )
-      ( "int16_t", arbToFrom (maxBound, minBound), "input" )
+      ( "int16_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "int16_t", "%d" )
   ]
 
 opsInt32 :: Gen (TestCase Int32 Int32)
 opsInt32 = elements
   [ TestCase
-      ( UExpr Int32 (ExternVar Int32 "input" Nothing) )
-      ( fmap (id) :: [Int32] -> [Int32] )
-      ( "int32_t", arbToFrom (maxBound - 1, minBound), "input")
+      ( alwaysTriggerArg1 $ UExpr Int32 (ExternVar Int32 "input" Nothing) )
+      ( fmap id :: [Int32] -> [Int32] )
+      ( "int32_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "int32_t", "%d" )
 
   , TestCase
-      ( UExpr Int32 (Op2 (Add Int32) (ExternVar Int32 "input" Nothing) (Const Int32 1)) )
-      ( fmap ((+1)) :: [Int32] -> [Int32] )
-      ( "int32_t", arbToFrom (maxBound - 1, minBound), "input" )
+      ( alwaysTriggerArg1 $ UExpr Int32 (Op2 (Add Int32) (ExternVar Int32 "input" Nothing) (Const Int32 1)) )
+      ( fmap (+1) :: [Int32] -> [Int32] )
+      ( "int32_t", "input", chooseBoundedIntegral (minBound, maxBound - 1) )
       ( "int32_t", "%d" )
 
   , TestCase
-      ( UExpr Int32 (Op2 (Sub Int32) (ExternVar Int32 "input" Nothing) (Const Int32 128)) )
-      ( fmap ((\x -> x - 128)) :: [Int32] -> [Int32] )
-      ( "int32_t", arbToFrom (maxBound, minBound + 128), "input" )
+      ( alwaysTriggerArg1 $ UExpr Int32 (Op2 (Sub Int32) (ExternVar Int32 "input" Nothing) (Const Int32 128)) )
+      ( fmap (\x -> x - 128) :: [Int32] -> [Int32] )
+      ( "int32_t", "input", chooseBoundedIntegral (minBound + 128, maxBound) )
       ( "int32_t", "%d" )
 
   , TestCase
-      ( UExpr Int32 (Op2 (Sub Int32) (ExternVar Int32 "input" Nothing) (ExternVar Int32 "input" Nothing)) )
+      ( alwaysTriggerArg1 $ UExpr Int32 (Op2 (Sub Int32) (ExternVar Int32 "input" Nothing) (ExternVar Int32 "input" Nothing)) )
       ( fmap (const 0) :: [Int32] -> [Int32] )
-      ( "int32_t", arbToFrom (maxBound, minBound), "input" )
+      ( "int32_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "int32_t", "%d" )
   ]
 
 opsInt64 :: Gen (TestCase Int64 Int64)
 opsInt64 = elements
   [ TestCase
-      ( UExpr Int64 (ExternVar Int64 "input" Nothing) )
-      ( fmap (id) :: [Int64] -> [Int64] )
-      ( "int64_t", arbToFrom (maxBound - 1, minBound), "input")
+      ( alwaysTriggerArg1 $ UExpr Int64 (ExternVar Int64 "input" Nothing) )
+      ( fmap id :: [Int64] -> [Int64] )
+      ( "int64_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "int64_t", "%\" PRId64 \"" )
 
   , TestCase
-      ( UExpr Int64 (Op2 (Add Int64) (ExternVar Int64 "input" Nothing) (Const Int64 1)) )
-      ( fmap ((+1)) :: [Int64] -> [Int64] )
-      ( "int64_t", arbToFrom (maxBound - 1, minBound), "input" )
+      ( alwaysTriggerArg1 $ UExpr Int64 (Op2 (Add Int64) (ExternVar Int64 "input" Nothing) (Const Int64 1)) )
+      ( fmap (+1) :: [Int64] -> [Int64] )
+      ( "int64_t", "input", chooseBoundedIntegral (minBound, maxBound - 1) )
       ( "int64_t", "%\" PRId64 \"" )
 
   , TestCase
-      ( UExpr Int64 (Op2 (Sub Int64) (ExternVar Int64 "input" Nothing) (Const Int64 128)) )
-      ( fmap ((\x -> x - 128)) :: [Int64] -> [Int64] )
-      ( "int64_t", arbToFrom (maxBound, minBound + 128), "input" )
+      ( alwaysTriggerArg1 $ UExpr Int64 (Op2 (Sub Int64) (ExternVar Int64 "input" Nothing) (Const Int64 128)) )
+      ( fmap (\x -> x - 128) :: [Int64] -> [Int64] )
+      ( "int64_t", "input", chooseBoundedIntegral (minBound + 128, maxBound) )
       ( "int64_t", "%\" PRId64 \"" )
 
   , TestCase
-      ( UExpr Int64 (Op2 (Sub Int64) (ExternVar Int64 "input" Nothing) (ExternVar Int64 "input" Nothing)) )
+      ( alwaysTriggerArg1 $ UExpr Int64 (Op2 (Sub Int64) (ExternVar Int64 "input" Nothing) (ExternVar Int64 "input" Nothing)) )
       ( fmap (const 0) :: [Int64] -> [Int64] )
-      ( "int64_t", arbToFrom (maxBound, minBound), "input" )
+      ( "int64_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "int64_t", "%\" PRId64 \"" )
   ]
 
 opsWord8 :: Gen (TestCase Word8 Word8)
 opsWord8 = elements
   [ TestCase
-      ( UExpr Word8 (ExternVar Word8 "input" Nothing) )
-      ( fmap (id) :: [Word8] -> [Word8] )
-      ( "uint8_t", arbToFrom (maxBound - 1, minBound), "input")
+      ( alwaysTriggerArg1 $ UExpr Word8 (ExternVar Word8 "input" Nothing) )
+      ( fmap id :: [Word8] -> [Word8] )
+      ( "uint8_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "uint8_t", "%d" )
 
   , TestCase
-      ( UExpr Word8 (Op2 (Add Word8) (ExternVar Word8 "input" Nothing) (Const Word8 1)) )
-      ( fmap ((+1)) :: [Word8] -> [Word8] )
-      ( "uint8_t", arbToFrom (maxBound - 1, minBound), "input" )
+      ( alwaysTriggerArg1 $ UExpr Word8 (Op2 (Add Word8) (ExternVar Word8 "input" Nothing) (Const Word8 1)) )
+      ( fmap (+1) :: [Word8] -> [Word8] )
+      ( "uint8_t", "input", chooseBoundedIntegral (minBound, maxBound - 1) )
       ( "uint8_t", "%d" )
 
   , TestCase
-      ( UExpr Word8 (Op2 (Sub Word8) (ExternVar Word8 "input" Nothing) (Const Word8 64)) )
-      ( fmap ((\x -> x - 64)) :: [Word8] -> [Word8] )
-      ( "uint8_t", arbToFrom (maxBound, minBound + 128), "input" )
+      ( alwaysTriggerArg1 $ UExpr Word8 (Op2 (Sub Word8) (ExternVar Word8 "input" Nothing) (Const Word8 64)) )
+      ( fmap (\x -> x - 64) :: [Word8] -> [Word8] )
+      ( "uint8_t", "input", chooseBoundedIntegral (minBound + 128, maxBound) )
       ( "uint8_t", "%d" )
 
   , TestCase
-      ( UExpr Word8 (Op2 (Sub Word8) (ExternVar Word8 "input" Nothing) (ExternVar Word8 "input" Nothing)) )
+      ( alwaysTriggerArg1 $ UExpr Word8 (Op2 (Sub Word8) (ExternVar Word8 "input" Nothing) (ExternVar Word8 "input" Nothing)) )
       ( fmap (const 0) :: [Word8] -> [Word8] )
-      ( "uint8_t", arbToFrom (maxBound, minBound), "input" )
+      ( "uint8_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "uint8_t", "%d" )
   ]
 
 opsWord16 :: Gen (TestCase Word16 Word16)
 opsWord16 = elements
   [ TestCase
-      ( UExpr Word16 (ExternVar Word16 "input" Nothing) )
-      ( fmap (id) :: [Word16] -> [Word16] )
-      ( "uint16_t", arbToFrom (maxBound - 1, minBound), "input")
+      ( alwaysTriggerArg1 $ UExpr Word16 (ExternVar Word16 "input" Nothing) )
+      ( fmap id :: [Word16] -> [Word16] )
+      ( "uint16_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "uint16_t", "%d" )
 
   , TestCase
-      ( UExpr Word16 (Op2 (Add Word16) (ExternVar Word16 "input" Nothing) (Const Word16 1)) )
-      ( fmap ((+1)) :: [Word16] -> [Word16] )
-      ( "uint16_t", arbToFrom (maxBound - 1, minBound), "input" )
+      ( alwaysTriggerArg1 $ UExpr Word16 (Op2 (Add Word16) (ExternVar Word16 "input" Nothing) (Const Word16 1)) )
+      ( fmap (+1) :: [Word16] -> [Word16] )
+      ( "uint16_t", "input", chooseBoundedIntegral (minBound, maxBound - 1) )
       ( "uint16_t", "%d" )
 
   , TestCase
-      ( UExpr Word16 (Op2 (Sub Word16) (ExternVar Word16 "input" Nothing) (Const Word16 128)) )
-      ( fmap ((\x -> x - 128)) :: [Word16] -> [Word16] )
-      ( "uint16_t", arbToFrom (maxBound, minBound + 128), "input" )
+      ( alwaysTriggerArg1 $ UExpr Word16 (Op2 (Sub Word16) (ExternVar Word16 "input" Nothing) (Const Word16 128)) )
+      ( fmap (\x -> x - 128) :: [Word16] -> [Word16] )
+      ( "uint16_t", "input", chooseBoundedIntegral (minBound + 128, maxBound) )
       ( "uint16_t", "%d" )
 
   , TestCase
-      ( UExpr Word16 (Op2 (Sub Word16) (ExternVar Word16 "input" Nothing) (ExternVar Word16 "input" Nothing)) )
+      ( alwaysTriggerArg1 $ UExpr Word16 (Op2 (Sub Word16) (ExternVar Word16 "input" Nothing) (ExternVar Word16 "input" Nothing)) )
       ( fmap (const 0) :: [Word16] -> [Word16] )
-      ( "uint16_t", arbToFrom (maxBound, minBound), "input" )
+      ( "uint16_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "uint16_t", "%d" )
   ]
 
 opsWord32 :: Gen (TestCase Word32 Word32)
 opsWord32 = elements
   [ TestCase
-      ( UExpr Word32 (ExternVar Word32 "input" Nothing) )
-      ( fmap (id) :: [Word32] -> [Word32] )
-      ( "uint32_t", arbToFrom (maxBound - 1, minBound), "input")
+      ( alwaysTriggerArg1 $ UExpr Word32 (ExternVar Word32 "input" Nothing) )
+      ( fmap id :: [Word32] -> [Word32] )
+      ( "uint32_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "uint32_t", "%d" )
 
   , TestCase
-      ( UExpr Word32 (Op2 (Add Word32) (ExternVar Word32 "input" Nothing) (Const Word32 1)) )
-      ( fmap ((+1)) :: [Word32] -> [Word32] )
-      ( "uint32_t", arbToFrom (maxBound - 1, minBound), "input" )
+      ( alwaysTriggerArg1 $ UExpr Word32 (Op2 (Add Word32) (ExternVar Word32 "input" Nothing) (Const Word32 1)) )
+      ( fmap (+1) :: [Word32] -> [Word32] )
+      ( "uint32_t", "input", chooseBoundedIntegral (minBound, maxBound - 1) )
       ( "uint32_t", "%d" )
 
   , TestCase
-      ( UExpr Word32 (Op2 (Sub Word32) (ExternVar Word32 "input" Nothing) (Const Word32 128)) )
-      ( fmap ((\x -> x - 128)) :: [Word32] -> [Word32] )
-      ( "uint32_t", arbToFrom (maxBound, minBound + 128), "input" )
+      ( alwaysTriggerArg1 $ UExpr Word32 (Op2 (Sub Word32) (ExternVar Word32 "input" Nothing) (Const Word32 128)) )
+      ( fmap (\x -> x - 128) :: [Word32] -> [Word32] )
+      ( "uint32_t", "input", chooseBoundedIntegral (minBound + 128, maxBound) )
       ( "uint32_t", "%d" )
 
   , TestCase
-      ( UExpr Word32 (Op2 (Sub Word32) (ExternVar Word32 "input" Nothing) (ExternVar Word32 "input" Nothing)) )
+      ( alwaysTriggerArg1 $ UExpr Word32 (Op2 (Sub Word32) (ExternVar Word32 "input" Nothing) (ExternVar Word32 "input" Nothing)) )
       ( fmap (const 0) :: [Word32] -> [Word32] )
-      ( "uint32_t", arbToFrom (maxBound, minBound), "input" )
+      ( "uint32_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "uint32_t", "%d" )
   ]
 
 opsWord64 :: Gen (TestCase Word64 Word64)
 opsWord64 = elements
   [ TestCase
-      ( UExpr Word64 (ExternVar Word64 "input" Nothing) )
-      ( fmap (id) :: [Word64] -> [Word64] )
-      ( "uint64_t", arbToFrom (maxBound - 1, minBound), "input")
+      ( alwaysTriggerArg1 $ UExpr Word64 (ExternVar Word64 "input" Nothing) )
+      ( fmap id :: [Word64] -> [Word64] )
+      ( "uint64_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "uint64_t", "%\" PRIu64 \"" )
 
   , TestCase
-      ( UExpr Word64 (Op2 (Add Word64) (ExternVar Word64 "input" Nothing) (Const Word64 1)) )
-      ( fmap ((+1)) :: [Word64] -> [Word64] )
-      ( "uint64_t", arbToFrom (maxBound - 1, minBound), "input" )
+      ( alwaysTriggerArg1 $ UExpr Word64 (Op2 (Add Word64) (ExternVar Word64 "input" Nothing) (Const Word64 1)) )
+      ( fmap (+1) :: [Word64] -> [Word64] )
+      ( "uint64_t", "input", chooseBoundedIntegral (minBound, maxBound - 1) )
       ( "uint64_t", "%\" PRIu64 \"" )
 
   , TestCase
-      ( UExpr Word64 (Op2 (Sub Word64) (ExternVar Word64 "input" Nothing) (Const Word64 128)) )
-      ( fmap ((\x -> x - 128)) :: [Word64] -> [Word64] )
-      ( "uint64_t", arbToFrom (maxBound, minBound + 128), "input" )
+      ( alwaysTriggerArg1 $ UExpr Word64 (Op2 (Sub Word64) (ExternVar Word64 "input" Nothing) (Const Word64 128)) )
+      ( fmap (\x -> x - 128) :: [Word64] -> [Word64] )
+      ( "uint64_t", "input", chooseBoundedIntegral (minBound + 128, maxBound) )
       ( "uint64_t", "%\" PRIu64 \"" )
 
   , TestCase
-      ( UExpr Word64 (Op2 (Sub Word64) (ExternVar Word64 "input" Nothing) (ExternVar Word64 "input" Nothing)) )
+      ( alwaysTriggerArg1 $ UExpr Word64 (Op2 (Sub Word64) (ExternVar Word64 "input" Nothing) (ExternVar Word64 "input" Nothing)) )
       ( fmap (const 0) :: [Word64] -> [Word64] )
-      ( "uint64_t", arbToFrom (maxBound, minBound), "input" )
+      ( "uint64_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "uint64_t", "%\" PRIu64 \"" )
   ]
 
@@ -632,9 +622,24 @@ compileExecutable baseName linked = do
     then doesFileExist baseName
     else return False
 
--- * Generators
+-- ** Spec builders
 
-arbToFrom :: Integral a => (a, a) -> Gen a
-arbToFrom (hi, lo) = do
-  w <- chooseUpTo (fromIntegral hi - fromIntegral lo)
-  return $ fromIntegral (w + fromIntegral lo)
+-- | Build a 'Spec' that triggers at every step, passing the given expression
+-- as argument, and execution a function 'printBack'
+alwaysTriggerArg1 :: UExpr -> Spec
+alwaysTriggerArg1 = sometimesTriggerArg1 (Const Bool True)
+
+-- | Build a 'Spec' that triggers based on a given boolean stream, passing the
+-- given expression as argument, and execution a function 'printBack'
+sometimesTriggerArg1 :: Expr Bool -> UExpr -> Spec
+sometimesTriggerArg1 guard expr =
+    Spec streams observers triggers properties
+  where
+
+    streams    = []
+    observers  = []
+    properties = []
+
+    triggers = [ Trigger function guard args ]
+    function = "printBack"
+    args     = [ expr ]
