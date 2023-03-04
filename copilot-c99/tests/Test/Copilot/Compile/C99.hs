@@ -17,7 +17,7 @@ import Test.Framework                       (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck                      (Gen, Property, elements,
                                              forAllBlind, ioProperty, shuffle,
-                                             (===), (==>), forAll, listOf, (.&&.))
+                                             (===), (==>), forAll, vectorOf, (.&&.), getPositive, arbitrary)
 import Test.QuickCheck.Gen                  (chooseUpTo, elements)
 
 -- External imports: Copilot
@@ -184,27 +184,30 @@ testCompileAndRun = ioProperty $ do
 -- | Test running a compiled C program and comparing the results.
 testRunCompare :: Property
 testRunCompare = testRunCompare' opsInt8
-           .&&.  testRunCompare' opsInt16
+            .&&. testRunCompare' opsInt16
 
-testRunCompare' :: Gen Wrapper -> Property
+testRunCompare' :: (Show a, Read b, Eq b) => Gen (Wrapper a b) -> Property
 testRunCompare' ops =
   forAllBlind ops $ \testCase ->
     let (Wrapper copilotUExpr haskellFun inputVar outputVar name) = testCase
         (cTypeInput, gen, cInputName) = inputVar
-    in
-      forAll (listOf gen) $ \nums -> do
-        let inputs = [ (cTypeInput, fmap show nums, cInputName) ]
-        f inputs nums copilotUExpr haskellFun outputVar name
 
-f :: (Show a, Read b, Eq b)
+    in forAll (getPositive <$> arbitrary) $ \len ->
+         forAll (vectorOf len gen) $ \nums -> do
+
+         let inputs  = [ (cTypeInput, fmap show nums, cInputName) ]
+             outputs = fmap haskellFun nums
+
+         f inputs outputs copilotUExpr outputVar name
+
+f :: (Read b, Eq b)
   => [(String, [String], String)]
-  -> [a]
+  -> [b]
   -> UExpr
-  -> (a -> b)
   -> (String, String)
   -> String
   -> Property
-f inputs nums copilotUExpr haskellFun outputVar name = do
+f inputs nums copilotUExpr outputVar name = do
         let (cTypeRes, cStr) = outputVar
 
         let numSteps      = length nums
@@ -224,10 +227,6 @@ f inputs nums copilotUExpr haskellFun outputVar name = do
 
           testDir <- mkdtemp "copilot_test_"
           setCurrentDirectory testDir
-
-          hPutStrLn stderr $ "Testing\t" ++ name ++
-                             -- " :: " ++ cTypeInput ++ " -> " ++ cTypeRes ++
-                             "\t with inputs: " ++ show nums
 
           let spec = Spec streams observers triggers properties
 
@@ -300,7 +299,7 @@ f inputs nums copilotUExpr haskellFun outputVar name = do
           let ls   = lines out
               outNums = fmap read ls
 
-              comparison = outNums == fmap haskellFun nums
+              comparison = outNums == nums
 
           -- Remove file produced by GCC
           removeFile "copilot_test.o"
@@ -319,7 +318,7 @@ f inputs nums copilotUExpr haskellFun outputVar name = do
 
           return $ r && r2 && comparison
 
-opsInt8 :: Gen Wrapper
+opsInt8 :: Gen (Wrapper Int8 Int8)
 opsInt8 = elements
   [ Wrapper
       ( UExpr Int8 (Op2 (Add Int8) (ExternVar Int8 "input" Nothing) (Const Int8 1)) )
@@ -336,7 +335,7 @@ opsInt8 = elements
       ( "identity" )
   ]
 
-opsInt16 :: Gen Wrapper
+opsInt16 :: Gen (Wrapper Int16 Int16)
 opsInt16 = elements
   [ Wrapper
       ( UExpr Int16 (Op2 (Add Int16) (ExternVar Int16 "input" Nothing) (Const Int16 1)) )
@@ -352,7 +351,7 @@ opsInt16 = elements
       ( "minusOne" )
   ]
 
-data Wrapper = forall a b . (Read a, Show b, Eq b) => Wrapper
+data Wrapper a b = Wrapper
   { wrapExpr   :: UExpr
   , wrapFun    :: a -> b
   , wrapCopInp :: (String, Gen a, String)
@@ -402,9 +401,6 @@ compileExecutable baseName linked = do
     else return False
 
 -- * Generators
-
-arbInts8 :: (Int8, Int8) -> Gen [Int8]
-arbInts8 = listOf . arbInt8
 
 arbInt8 :: (Int8, Int8) -> Gen Int8
 arbInt8 (hi, lo) = do
