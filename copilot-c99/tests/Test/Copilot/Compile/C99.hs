@@ -315,6 +315,16 @@ opsInt16 =
       ( "%d" )
       ( "plusOne" )
       (arbInt16 (maxBound - 1, minBound))
+  , Wrapper
+      ( UExpr Int16 (Op2 (Sub Int16) (ExternVar Int16 "input" Nothing) (Const Int16 128)) )
+      ( (\x -> x - 128) :: Int16 -> Int16 )
+      ( CC.Int16 )
+      ( CC.Int16 )
+      ( "int16_t" )
+      ( "int16_t" )
+      ( "%d" )
+      ( "minusOne" )
+      (arbInt16 (maxBound, minBound + 128))
   ]
 
 data Wrapper a b = Wrapper
@@ -328,7 +338,6 @@ data Wrapper a b = Wrapper
   , wrapName   :: String
   , wrapGen    :: Gen a
   }
-
 
 -- -- | Test Op1.
 -- testOp1 :: Property
