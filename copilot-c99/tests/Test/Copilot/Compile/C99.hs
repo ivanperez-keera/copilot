@@ -193,130 +193,146 @@ testRunCompare' ops =
         (cTypeInput, gen, cInputName) = inputVar
 
     in forAll (getPositive <$> arbitrary) $ \len ->
+
          forAll (vectorOf len gen) $ \nums -> do
 
          let inputs  = [ (cTypeInput, fmap show nums, cInputName) ]
              outputs = fmap haskellFun nums
 
-         f inputs outputs copilotUExpr outputVar name
+         testRunCompareArg inputs outputs copilotUExpr outputVar name
 
-f :: (Read b, Eq b)
-  => [(String, [String], String)]
-  -> [b]
-  -> UExpr
-  -> (String, String)
-  -> String
-  -> Property
-f inputs nums copilotUExpr outputVar name = do
-        let (cTypeRes, cStr) = outputVar
+-- | Test running a compiled C program and comparing the results, when the
+-- program produces one output as an argument to a trigger that always fires.
+--
+-- PRE: all lists (second argument) of inputs are the same length, and nums
+-- also has the same length.
+testRunCompareArg :: (Read b, Eq b)
+                  => [(String, [String], String)]
+                  -> [b]
+                  -> UExpr
+                  -> (String, String)
+                  -> String
+                  -> Property
+testRunCompareArg inputs nums copilotUExpr outputVar name = do
+  let (cTypeRes, cStr) = outputVar
 
-        let numSteps      = length nums
-            maxInputsName = "MAX_STEPS"
+  let numSteps      = length nums
+      maxInputsName = "MAX_STEPS"
 
-        let vars = map oneInput inputs
-            oneInput (cTypeInput, inputVals, cInputName) =
-                (cTypeInput, inputVarName, inputArrVarName, inputVals)
-              where
-                inputVarName    = cInputName
-                inputArrVarName = cInputName ++ "_s"
+  let vars = map oneInput inputs
+      oneInput (cTypeInput, inputVals, cInputName) =
+          (cTypeInput, inputVarName, inputArrVarName, inputVals)
+        where
+          inputVarName    = cInputName
+          inputArrVarName = cInputName ++ "_s"
 
-        ioProperty $ do
+  ioProperty $ do
+    tmpDir <- getTemporaryDirectory
+    setCurrentDirectory tmpDir
 
-          tmpDir <- getTemporaryDirectory
-          setCurrentDirectory tmpDir
+    testDir <- mkdtemp "copilot_test_"
+    setCurrentDirectory testDir
 
-          testDir <- mkdtemp "copilot_test_"
-          setCurrentDirectory testDir
+    let cProgram = testRunCompareArgCProgram inputs nums copilotUExpr outputVar name
 
-          let spec = Spec streams observers triggers properties
+    let spec = Spec streams observers triggers properties
 
-              streams    = []
-              observers  = []
-              properties = []
+        streams    = []
+        observers  = []
+        properties = []
 
-              triggers = [ Trigger function guard args ]
-              function = "printBack"
-              guard    = Const Bool True
-              args     = [copilotUExpr]
+        triggers = [ Trigger function guard args ]
+        function = "printBack"
+        guard    = Const Bool True
+        args     = [copilotUExpr]
 
-          compile "copilot_test" spec
-          r <- compileC "copilot_test"
+    compile "copilot_test" spec
+    r <- compileC "copilot_test"
 
-          let varDecls :: [String]
-              varDecls =
-                [ "int " ++ maxInputsName ++ " = " ++ show numSteps ++ ";" ]
-                ++ inputVarDecls
+    writeFile "main.c" cProgram
 
-              inputVarDecls :: [String]
-              inputVarDecls = concatMap (\(ctype, varName, arrVar, arrVals) ->
-                let inputsStr = concat $ intersperse ", " (arrVals :: [String]) in
-                [ ctype ++ " " ++ arrVar ++ "[] = {" ++ inputsStr ++ "};"
-                , ""
-                , ctype ++ " " ++ varName ++ ";"
-                ])
-                vars
+    -- Compile a main program
+    r2 <- compileExecutable "main" [ "copilot_test.o" ]
 
-              inputUpdates :: [String]
-              inputUpdates = concatMap (\(ctype, varName, arrVar, arrVals) ->
-                [ "    " ++ varName ++ " = " ++ arrVar ++ "[i];"
-                ])
-                vars
+    print r2
+    print testDir
 
-          let cProgram = unlines $
-                [ "#include <stdio.h>"
-                , "#include <stdint.h>"
-                , "#include \"copilot_test.h\""
-                , ""
-                ]
-                ++ varDecls ++
-                [ ""
-                , "void printBack (" ++ cTypeRes ++ " num) {"
-                , "  printf(\"" ++ cStr ++ "\\n\", num);"
-                , "}"
-                , ""
-                , "int main () {"
-                , "  int i = 0;"
-                , "  for (i = 0; i < " ++ maxInputsName ++ "; i++) {"
-                ]
-                ++ inputUpdates ++
-                [ ""
-                , "    step();"
-                , "  }"
-                , "  return 0;"
-                , "}"
-                ]
+    out <- readProcess "./main" [] ""
 
-          writeFile "main.c" cProgram
+    let ls   = lines out
+        outNums = fmap read ls
 
-          -- Compile a main program
-          r2 <- compileExecutable "main" [ "copilot_test.o" ]
+        comparison = outNums == nums
 
-          print r2
-          print testDir
+    -- Remove file produced by GCC
+    removeFile "copilot_test.o"
+    removeFile "main"
 
-          out <- readProcess "./main" [] ""
+    -- Remove files produced "by hand"
+    removeFile "main.c"
 
-          let ls   = lines out
-              outNums = fmap read ls
+    -- Remove files produced by Copilot
+    removeFile "copilot_test.c"
+    removeFile "copilot_test.h"
+    removeFile "copilot_test_types.h"
 
-              comparison = outNums == nums
+    setCurrentDirectory tmpDir
+    removeDirectory testDir
 
-          -- Remove file produced by GCC
-          removeFile "copilot_test.o"
-          removeFile "main"
+    return $ r && r2 && comparison
 
-          -- Remove files produced "by hand"
-          removeFile "main.c"
+testRunCompareArgCProgram ::  (Read b, Eq b)
+                          => [(String, [String], String)]
+                          -> [b]
+                          -> UExpr
+                          -> (String, String)
+                          -> String
+                          -> Property
+testRunCompareArgCProgram inputs nums copilotUExpr outputVar name =
+    let varDecls :: [String]
+        varDecls =
+          [ "int " ++ maxInputsName ++ " = " ++ show numSteps ++ ";" ]
+          ++ inputVarDecls
 
-          -- Remove files produced by Copilot
-          removeFile "copilot_test.c"
-          removeFile "copilot_test.h"
-          removeFile "copilot_test_types.h"
+        inputVarDecls :: [String]
+        inputVarDecls = concatMap (\(ctype, varName, arrVar, arrVals) ->
+          let inputsStr = concat $ intersperse ", " (arrVals :: [String]) in
+          [ ctype ++ " " ++ arrVar ++ "[] = {" ++ inputsStr ++ "};"
+          , ""
+          , ctype ++ " " ++ varName ++ ";"
+          ])
+          vars
 
-          setCurrentDirectory tmpDir
-          removeDirectory testDir
+        inputUpdates :: [String]
+        inputUpdates = concatMap (\(ctype, varName, arrVar, arrVals) ->
+          [ "    " ++ varName ++ " = " ++ arrVar ++ "[i];"
+          ])
+          vars
 
-          return $ r && r2 && comparison
+    let cProgram = unlines $
+          [ "#include <stdio.h>"
+          , "#include <stdint.h>"
+          , "#include \"copilot_test.h\""
+          , ""
+          ]
+          ++ varDecls ++
+          [ ""
+          , "void printBack (" ++ cTypeRes ++ " num) {"
+          , "  printf(\"" ++ cStr ++ "\\n\", num);"
+          , "}"
+          , ""
+          , "int main () {"
+          , "  int i = 0;"
+          , "  for (i = 0; i < " ++ maxInputsName ++ "; i++) {"
+          ]
+          ++ inputUpdates ++
+          [ ""
+          , "    step();"
+          , "  }"
+          , "  return 0;"
+          , "}"
+          ]
+    in cProgram
 
 opsInt8 :: Gen (Wrapper Int8 Int8)
 opsInt8 = elements
