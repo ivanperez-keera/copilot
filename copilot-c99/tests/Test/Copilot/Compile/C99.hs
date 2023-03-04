@@ -390,6 +390,15 @@ opsInt8 = elements
       ( filter even :: [Int8] -> [Int8])
       ( "int8_t", "input", chooseBoundedIntegral (minBound, maxBound) )
       ( "int8_t", "%d" )
+
+  , TestCase
+      ( alwaysTriggerStreamsArg1
+          (UExpr Int8 (Drop Int8 0 0))
+          [ Stream 0 [1] (ExternVar Int8 "input" Nothing) Int8 ]
+      )
+      ( (\x -> take (length x) (1:x)) :: [Int8] -> [Int8] )
+      ( "int8_t", "input", chooseBoundedIntegral (minBound, maxBound) )
+      ( "int8_t", "%d" )
   ]
 
 opsInt16 :: Gen (TestCase Int16 Int16)
@@ -642,4 +651,20 @@ sometimesTriggerArg1 guard expr =
 
     triggers = [ Trigger function guard args ]
     function = "printBack"
+    args     = [ expr ]
+
+
+-- | Build a 'Spec' that triggers based on a given boolean stream, passing the
+-- given expression as argument, and execution a function 'printBack'
+alwaysTriggerStreamsArg1 :: UExpr -> [Stream] -> Spec
+alwaysTriggerStreamsArg1 expr streams =
+    Spec streams observers triggers properties
+  where
+
+    observers  = []
+    properties = []
+
+    triggers = [ Trigger function guard args ]
+    function = "printBack"
+    guard    = Const Bool True
     args     = [ expr ]
