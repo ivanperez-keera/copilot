@@ -191,13 +191,21 @@ testRunCompare' ops =
   forAllBlind ops $ \testCase ->
     let (Wrapper copilotUExpr haskellFun inputVar outputVar name) = testCase
         (cTypeInput, gen, cInputName) = inputVar
-        (cTypeRes, cStr) = outputVar
     in
-      forAll (listOf gen) $ \nums -> do f
-
-f =
-
+      forAll (listOf gen) $ \nums -> do
         let inputs = [ (cTypeInput, fmap show nums, cInputName) ]
+        f inputs nums copilotUExpr haskellFun outputVar name
+
+f :: (Show a, Read b, Eq b)
+  => [(String, [String], String)]
+  -> [a]
+  -> UExpr
+  -> (a -> b)
+  -> (String, String)
+  -> String
+  -> Property
+f inputs nums copilotUExpr haskellFun outputVar name = do
+        let (cTypeRes, cStr) = outputVar
 
         let numSteps      = length nums
             maxInputsName = "MAX_STEPS"
@@ -218,7 +226,7 @@ f =
           setCurrentDirectory testDir
 
           hPutStrLn stderr $ "Testing\t" ++ name ++
-                             " :: " ++ cTypeInput ++ " -> " ++ cTypeRes ++
+                             -- " :: " ++ cTypeInput ++ " -> " ++ cTypeRes ++
                              "\t with inputs: " ++ show nums
 
           let spec = Spec streams observers triggers properties
