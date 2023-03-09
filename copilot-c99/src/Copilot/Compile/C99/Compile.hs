@@ -6,8 +6,9 @@ module Copilot.Compile.C99.Compile
   ) where
 
 import Text.PrettyPrint     (render)
-import Data.List            (nub)
+import Data.List            (nub, union)
 import Data.Maybe           (catMaybes)
+import Data.Typeable        (Typeable)
 import System.Directory     (createDirectoryIfMissing)
 import System.Exit          (exitFailure)
 import System.FilePath      ((</>))
@@ -73,8 +74,9 @@ compile = compileWith mkDefaultCSettings
 -- * Generator functions for streams, guards and trigger arguments.
 -- * Declaration of the @step()@ function.
 compilec :: CSettings -> Spec -> C.TransUnit
-compilec cSettings spec = C.TransUnit declns funs
+compilec cSettings specO = C.TransUnit declns funs
   where
+    spec     = cleanSpec specO
     streams  = specStreams spec
     triggers = specTriggers spec
     exts     = gatherexts streams triggers
@@ -119,8 +121,9 @@ compilec cSettings spec = C.TransUnit declns funs
 
 -- | Generate the .h file from a 'Spec'.
 compileh :: CSettings -> Spec -> C.TransUnit
-compileh cSettings spec = C.TransUnit declns []
+compileh cSettings specO = C.TransUnit declns []
   where
+    spec     = cleanSpec specO
     streams  = specStreams spec
     triggers = specTriggers spec
     exts     = gatherexts streams triggers
@@ -195,3 +198,59 @@ compileTypeDeclns _cSettings spec = C.TransUnit declns []
 safeCRender :: C.TransUnit -> String
 safeCRender (C.TransUnit [] []) = ""
 safeCRender transUnit           = render $ pretty $ C.translate transUnit
+
+-- | Remove unused variables from a Spec.
+cleanSpec :: Spec -> Spec
+cleanSpec spec = spec
+  { specStreams  = fmap cleanStream (specStreams spec)
+  , specTriggers = fmap cleanTrigger (specTriggers spec)
+  }
+
+-- | Remove unused variables from a Stream.
+cleanStream :: Stream -> Stream
+cleanStream (Stream id buf expr ty) = Stream
+  { streamId       = id
+  , streamBuffer   = buf
+  , streamExpr     = cleanExpr expr
+  , streamExprType = ty
+  }
+
+-- | Remove unused variables from a Trigger.
+cleanTrigger :: Trigger -> Trigger
+cleanTrigger t = t
+  { triggerGuard = cleanExpr (triggerGuard t)
+  , triggerArgs  = fmap cleanUExpr (triggerArgs t)
+  }
+
+-- | Remove unused variables from a UExpr.
+cleanUExpr :: UExpr -> UExpr
+cleanUExpr (UExpr ty expr) = UExpr ty (cleanExpr expr)
+
+-- | Remove unused variables from an Expr.
+cleanExpr :: Typeable a => Expr a -> Expr a
+cleanExpr e = case e of
+  Local ta tb name exprLocal exprIn
+    | smaller1 <- cleanExpr exprLocal
+    , smaller2 <- cleanExpr exprIn
+    , name `elem` exprNames smaller1 || name `elem` exprNames smaller2
+    -> Local ta tb name smaller1 smaller2
+
+    | otherwise
+    -> cleanExpr exprIn
+
+  Op1 ty e1       -> Op1 ty (cleanExpr e1)
+  Op2 ty e1 e2    -> Op2 ty (cleanExpr e1) (cleanExpr e2)
+  Op3 ty e1 e2 e3 -> Op3 ty (cleanExpr e1) (cleanExpr e2) (cleanExpr e3)
+  Label ty n e    -> Label ty n (cleanExpr e)
+  _ -> e
+
+-- | List all variables in an expression, returns items uniquely.
+exprNames :: Typeable a => Expr a -> [String]
+exprNames e = case e of
+  Var _ n               -> [n]
+  Local ty1 ty2 _ e1 e2 -> exprNames e1 `union` exprNames e2
+  Op1 _ e1              -> exprNames e1
+  Op2 _ e1 e2           -> exprNames e1 `union` exprNames e2
+  Op3 _ e1 e2 e3        -> exprNames e1 `union` exprNames e2 `union` exprNames e3
+  Label _ _ e           -> exprNames e
+  _                     -> []
