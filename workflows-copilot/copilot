@@ -1,0 +1,12 @@
+#!/bin/bash
+SPEC="$(cd "$(dirname "$1")"; pwd -P)/$(basename "$1")"
+DIR=$PWD
+
+# Test if Copilot is available without docker
+runhaskell <<< $(echo "import Language.Copilot; import Copilot.Compile.C99; main = return ()") 2>/dev/null
+
+case "$?" in
+  0) echo "Native" >&2; CMD="runhaskell $SPEC" ;;
+  *) echo "Docker" >&2; CMD="docker run -v $SPEC:/tmp/Spec.hs -v $DIR:/tmp/output --workdir=/tmp/output/ -it dock runhaskell /tmp/Spec.hs" ;;
+esac
+$CMD
