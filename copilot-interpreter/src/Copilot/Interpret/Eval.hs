@@ -13,6 +13,7 @@ module Copilot.Interpret.Eval
   , ExecTrace (..)
   , eval
   , ShowType (..)
+  , evalExpr_
   ) where
 
 import Copilot.Core            (Expr (..), Field (..), Id, Name, Observer (..),

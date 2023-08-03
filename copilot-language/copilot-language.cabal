@@ -66,10 +66,10 @@ library
                  , Copilot.Language.Reify
                  , Copilot.Language.Stream
                  , Copilot.Language.Spec
+                 , System.Mem.StableName.Map
   other-modules:   Copilot.Language.Analyze
                  , Copilot.Language.Interpret
                  , System.Mem.StableName.Dynamic
-                 , System.Mem.StableName.Map
                  , Copilot.Language.Error
   ghc-options:
     -Wall

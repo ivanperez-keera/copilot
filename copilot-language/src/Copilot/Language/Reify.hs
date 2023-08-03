@@ -9,6 +9,7 @@
 
 module Copilot.Language.Reify
   ( reify
+  , mkExpr
   ) where
 
 import qualified Copilot.Core as Core
