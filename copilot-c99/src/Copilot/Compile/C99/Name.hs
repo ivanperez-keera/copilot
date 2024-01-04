@@ -44,18 +44,18 @@ guardName :: String -> String
 guardName name = name ++ "_guard"
 
 -- | Turn a trigger name into a trigger argument name.
-argName :: String -> Int -> String
-argName name n = name ++ "_arg" ++ show n
+argName :: String -> Int -> Int -> String
+argName name counter n = name ++ "_" ++ show counter ++ "_arg" ++ show n
 
 -- | Turn a handler function name into a name for a temporary variable for a
 -- handler argument.
-argTempName :: String -> Int -> String
-argTempName name n = name ++ "_arg_temp" ++ show n
+argTempName :: String -> Int -> Int -> String
+argTempName name counter n = name ++ "_" ++ show counter ++ "_arg_temp" ++ show n
 
 -- | Enumerate all argument names based on trigger name.
-argNames :: String -> [String]
-argNames base = map (argName base) [0..]
+argNames :: String -> Int -> [String]
+argNames base counter = map (argName base counter) [0..]
 
 -- | Enumerate all temporary variable names based on handler function name.
-argTempNames :: String -> [String]
-argTempNames base = map (argTempName base) [0..]
+argTempNames :: String -> Int -> [String]
+argTempNames base counter = map (argTempName base counter) [0..]

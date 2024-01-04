@@ -180,7 +180,7 @@ mkStep cSettings streams triggers exts =
     (streamDeclns, tmpAssigns, bufferUpdates, indexUpdates) =
       unzip4 $ map mkUpdateGlobals streams
     (triggerDeclns, triggerStmts) =
-      unzip $ map mkTriggerCheck triggers
+      unzip $ map mkTriggerCheck (zip triggers [0..])
 
     -- Update the value of a variable with the result of calling a function that
     -- generates the next value in a stream expression. If the type of the
@@ -271,8 +271,8 @@ mkStep cSettings streams triggers exts =
     -- 2. Assigning a struct to a temporary variable defensively ensures that
     --    any modifications that the handler called makes to the struct argument
     --    will not affect the internals of the monitoring code.
-    mkTriggerCheck :: Trigger -> ([C.Decln], C.Stmt)
-    mkTriggerCheck (Trigger name _guard args) =
+    mkTriggerCheck :: (Trigger, Int) -> ([C.Decln], C.Stmt)
+    mkTriggerCheck (Trigger name _guard args, counter) =
         (aTmpDeclns, triggerCheckStmt)
       where
         aTmpDeclns :: [C.Decln]
@@ -285,7 +285,7 @@ mkStep cSettings streams triggers exts =
         triggerCheckStmt :: C.Stmt
         triggerCheckStmt = C.If guard' fireTrigger
           where
-            guard' = C.Funcall (C.Ident $ guardName name) []
+            guard' = C.Funcall (C.Ident $ guardName name ++ "_" ++ show counter) []
 
             -- The body of the if-statement. This consists of statements that
             -- assign the values of the temporary variables, following by a
@@ -305,7 +305,7 @@ mkStep cSettings streams triggers exts =
                   updateVar aTempName aArgName ty
 
                 aArgNames :: [C.Ident]
-                aArgNames = take (length args) (argNames name)
+                aArgNames = take (length args) (argNames name counter)
 
                 -- Build an expression to pass a temporary variable as argument
                 -- to a trigger handler.
@@ -323,7 +323,7 @@ mkStep cSettings streams triggers exts =
                     _        -> C.Ident aTempName
 
         aTempNames :: [String]
-        aTempNames = take (length args) (argTempNames name)
+        aTempNames = take (length args) (argTempNames name counter)
 
 -- * Auxiliary functions
 

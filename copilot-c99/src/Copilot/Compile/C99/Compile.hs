@@ -6,9 +6,10 @@ module Copilot.Compile.C99.Compile
   ) where
 
 -- External imports
-import           Data.List           ( nub, union )
+import           Data.List           ( nub, nubBy, union )
 import           Data.Maybe          ( mapMaybe )
-import           Data.Typeable       ( Typeable )
+import           Data.Typeable       ( Typeable)
+import           Data.Type.Equality  ( testEquality, (:~:)(Refl) )
 import           Language.C99.Pretty ( pretty )
 import qualified Language.C99.Simple as C
 import           System.Directory    ( createDirectoryIfMissing )
@@ -113,7 +114,7 @@ compileC cSettings spec = C.TransUnit declns funs
     mkGenFuns :: [Stream] -> [Trigger] -> [C.FunDef]
     mkGenFuns streamList triggerList =  map accessDecln streamList
                                      ++ map streamGen streamList
-                                     ++ concatMap triggerGen triggerList
+                                     ++ concatMap triggerGen (zip triggerList [0..])
       where
         accessDecln :: Stream -> C.FunDef
         accessDecln (Stream sId buff _ ty) = mkAccessDecln sId ty buff
@@ -122,11 +123,11 @@ compileC cSettings spec = C.TransUnit declns funs
         streamGen (Stream sId _ expr ty) =
           exprGen (generatorName sId) (generatorOutputArgName sId) expr ty
 
-        triggerGen :: Trigger -> [C.FunDef]
-        triggerGen (Trigger name guard args) = guardDef : argDefs
+        triggerGen :: (Trigger, Int) -> [C.FunDef]
+        triggerGen (Trigger name guard args, counter) = guardDef : argDefs
           where
-            guardDef = mkGenFun (guardName name) guard Bool
-            argDefs  = zipWith argGen (argNames name) args
+            guardDef = mkGenFun (guardName name ++ "_" ++ show counter) guard Bool
+            argDefs  = zipWith argGen (argNames name counter) args
 
             argGen :: String -> UExpr -> C.FunDef
             argGen argName (UExpr ty expr) =
@@ -149,7 +150,7 @@ compileH cSettings spec = C.TransUnit declns []
   where
     declns =  mkStructForwDeclns exprs
            ++ mkExts exts
-           ++ extFunDeclns triggers
+           ++ extFunDeclns (zip triggers [0..])
            ++ [stepDecln]
 
     exprs    = gatherExprs streams triggers
@@ -170,14 +171,17 @@ compileH cSettings spec = C.TransUnit declns []
     mkExts :: [External] -> [C.Decln]
     mkExts = map mkExtDecln
 
-    extFunDeclns :: [Trigger] -> [C.Decln]
-    extFunDeclns = map extFunDecln
+    extFunDeclns :: [(Trigger, Int)] -> [C.Decln]
+    extFunDeclns triggers = map extFunDecln uniqueTriggers
       where
-        extFunDecln :: Trigger -> C.Decln
-        extFunDecln (Trigger name _ args) = C.FunDecln Nothing cTy name params
+        uniqueTriggers = nubBy compareTrigger triggers
+
+        extFunDecln :: (Trigger, Int) -> C.Decln
+        extFunDecln (Trigger name _ args, counter) =
+            C.FunDecln Nothing cTy name params
           where
             cTy    = C.TypeSpec C.Void
-            params = zipWith mkParam (argNames name) args
+            params = zipWith mkParam (argNames name counter) args
 
             mkParam paramName (UExpr ty _) = C.Param (mkParamTy ty) paramName
 
@@ -256,3 +260,27 @@ gatherExprs streams triggers =  map streamUExpr streams
   where
     streamUExpr  (Stream _ _ expr ty)   = UExpr ty expr
     triggerUExpr (Trigger _ guard args) = UExpr Bool guard : args
+
+sameTypesUExpr :: UExpr -> UExpr -> Bool
+sameTypesUExpr (UExpr ty1 _) uexpr2 = sameTypesUExprA ty1 uexpr2
+
+sameTypesUExprA :: Typeable a => Type a -> UExpr -> Bool
+sameTypesUExprA ty1 (UExpr ty2 _) = sameTypesUExprAB ty1 ty2
+
+sameTypesUExprAB :: (Typeable a, Typeable b) => Type a -> Type b -> Bool
+sameTypesUExprAB ty1 ty2
+  | Just Refl <- testEquality ty1 ty2
+  = True
+  | otherwise
+  = False
+
+compareTrigger
+  (Trigger name1 _ args1, _)
+  (Trigger name2 _ args2, _)
+  = name1 == name2 && sameTypes args1 args2
+
+sameTypes []     []     = True
+sameTypes []     _      = False
+sameTypes _      []     = False
+sameTypes (x:xs) (y:ys) =
+  sameTypesUExpr x y && sameTypes xs ys
