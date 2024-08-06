@@ -15,7 +15,7 @@ import qualified Language.C99.Simple as C
 -- Internal imports: Copilot
 import Copilot.Core ( Expr (..), Field (..), Op1 (..), Op2 (..), Op3 (..),
                       Type (..), Value (..), accessorName, arrayElems,
-                      toValues, typeSize )
+                      toValues, typeSize, Array )
 
 -- Internal imports
 import Copilot.Compile.C99.Error ( impossible )
@@ -101,28 +101,37 @@ transExpr (Op2 op e1 e2) = do
   e2' <- transExpr e2
   return $ transOp2 op e1' e2'
 
-transexpr e@(Op3 (SetArray arrTy) e1 e2 e3) = do
-  e1' <- transexpr e1
-  e2' <- transexpr e2
-  e3' <- transexpr e3
-  env <- get
-  put (fst env, (snd env) ++ map C.Expr [dupArray arrTy dest e1', setArray dest e2' e3'])
-  return $ C.Index dest (C.LitInt 0)
-    where -- need to decln, memcpy, then modify (maybe declns are handled automatically?)
-      size :: Type (Array n t) -> C.Expr -- todo: refactor this out?
-      size arrTy@(Array ty) = C.LitInt (fromIntegral $ tysize arrTy) C..* C.SizeOfType (C.TypeName $ transtype ty)
+transExpr e@(Op3 (SetArray arrTy) e1 e2 e3) = do
+  e1' <- transExpr e1
+  e2' <- transExpr e2
+  e3' <- transExpr e3
 
-      exprHash :: Expr a -> C.Ident -- maybe implement hashable typeclass in the future, put in core
-      exprHash expr = "e" ++ (show $ hash $ render $ ppExpr expr)
+  -- Variable to hold the updated array
+  (i, _, _) <- get
+  let varName = "_v" ++ show i
+  modify (\(i, x, y) -> (i + 1, x, y))
 
-      dest :: C.Expr
-      dest = C.Ident (exprHash e)
+  -- Add new var decl
+  let initDecl = C.VarDecln Nothing cTy1 varName Nothing
+      cTy1     = transLocalVarDeclType arrTy
+  modify (\(i, x, y) -> (i, x ++ [initDecl], y))
 
-      dupArray :: Type (Array n t) -> C.Expr -> C.Expr -> C.Expr
-      dupArray arrTy dest e1 = let sizeOf = size arrTy in memcpy dest e1 (size arrTy)
+  let size :: Type (Array n t) -> C.Expr -- todo: refactor this out?
+      size arrTy@(Array ty) = C.LitInt (fromIntegral $ typeSize arrTy) C..* C.SizeOfType (C.TypeName $ transType ty)
 
-      setArray :: C.Expr -> C.Expr -> C.Expr -> C.Expr
-      setArray e1 e2 e3 = C.AssignOp C.Assign (C.Index (C.Index e1 (C.LitInt 0)) e2) e3
+  -- Initialize the var to the same value as the original array
+  let initStmt = C.Expr $ memcpy (C.Ident varName) e1' (size arrTy)
+
+  -- Update element of array
+  let updateStmt = C.Expr
+                 $ C.AssignOp
+                       C.Assign
+                       (C.Index (C.Ident varName) e2')
+                       e3'
+
+  modify (\(i, x, y) -> (i, x, y ++ [ initStmt, updateStmt ]))
+
+  return $ C.Ident varName
 
 transExpr (Op3 op e1 e2 e3) = do
   e1' <- transExpr e1
