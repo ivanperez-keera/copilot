@@ -101,6 +101,29 @@ transExpr (Op2 op e1 e2) = do
   e2' <- transExpr e2
   return $ transOp2 op e1' e2'
 
+transexpr e@(Op3 (SetArray arrTy) e1 e2 e3) = do
+  e1' <- transexpr e1
+  e2' <- transexpr e2
+  e3' <- transexpr e3
+  env <- get
+  put (fst env, (snd env) ++ map C.Expr [dupArray arrTy dest e1', setArray dest e2' e3'])
+  return $ C.Index dest (C.LitInt 0)
+    where -- need to decln, memcpy, then modify (maybe declns are handled automatically?)
+      size :: Type (Array n t) -> C.Expr -- todo: refactor this out?
+      size arrTy@(Array ty) = C.LitInt (fromIntegral $ tysize arrTy) C..* C.SizeOfType (C.TypeName $ transtype ty)
+
+      exprHash :: Expr a -> C.Ident -- maybe implement hashable typeclass in the future, put in core
+      exprHash expr = "e" ++ (show $ hash $ render $ ppExpr expr)
+
+      dest :: C.Expr
+      dest = C.Ident (exprHash e)
+
+      dupArray :: Type (Array n t) -> C.Expr -> C.Expr -> C.Expr
+      dupArray arrTy dest e1 = let sizeOf = size arrTy in memcpy dest e1 (size arrTy)
+
+      setArray :: C.Expr -> C.Expr -> C.Expr -> C.Expr
+      setArray e1 e2 e3 = C.AssignOp C.Assign (C.Index (C.Index e1 (C.LitInt 0)) e2) e3
+
 transExpr (Op3 op e1 e2 e3) = do
   e1' <- transExpr e1
   e2' <- transExpr e2
@@ -179,7 +202,8 @@ transOp2 op e1 e2 = case op of
 -- expression.
 transOp3 :: Op3 a b c d -> C.Expr -> C.Expr -> C.Expr -> C.Expr
 transOp3 op e1 e2 e3 = case op of
-  Mux _ -> C.Cond e1 e2 e3
+  Mux      _ -> C.Cond e1 e2 e3
+  SetArray _ -> impossible "transOp3" "copilot-c99"
 
 -- | Translate @'Abs' e@ in Copilot Core into a C99 expression.
 --
