@@ -108,6 +108,10 @@ ppOp3 op = case op of
     text "(if"   <+> doc1 <+>
     text "then" <+> doc2 <+>
     text "else" <+> doc3 <> text ")"
+  SetArray _ -> \ doc1 doc2 doc3 ->
+    text "(SetArray" <+> doc1 <+>
+    text "at"        <+> doc2 <+>
+    text "to"        <+> doc3 <> text ")"
 
 -- | Parenthesize two 'Doc's, separated by an infix 'String'.
 ppInfix :: String -> Doc -> Doc -> Doc
