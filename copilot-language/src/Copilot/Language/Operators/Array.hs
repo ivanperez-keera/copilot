@@ -4,11 +4,13 @@
 
 -- | Combinators to deal with streams carrying arrays.
 module Copilot.Language.Operators.Array
-  ( (.!!)
+  ( setArray
+  , (.!!)
   ) where
 
 import Copilot.Core             ( Typed
                                 , Op2 (Index)
+                                , Op3 (SetArray)
                                 , typeOf
                                 , Array
                                 )
@@ -27,3 +29,13 @@ import GHC.TypeLits             (KnownNat)
          , Typed t
          ) => Stream (Array n t) -> Stream Word32 -> Stream t
 arr .!! n = Op2 (Index typeOf) arr n
+
+-- | Update a stream of arrays.
+setArray :: ( KnownNat n
+            , Typed t
+            )
+         => Stream (Array n t)
+         -> Stream Word32
+         -> Stream t
+         -> Stream (Array n t)
+setArray arr n v = Op3 (SetArray typeOf) arr n v
