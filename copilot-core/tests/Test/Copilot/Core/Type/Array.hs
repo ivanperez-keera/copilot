@@ -10,8 +10,8 @@ import GHC.TypeNats                         (KnownNat, natVal)
 import Test.Framework                       (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck                      (Gen, Property, arbitrary,
-                                             expectFailure, forAll, property,
-                                             vector, vectorOf)
+                                             chooseInt, expectFailure, forAll,
+                                             property, vector, vectorOf)
 
 -- Internal imports: library modules being tested
 import Copilot.Core.Type.Array (Array, array, arrayElems)
@@ -30,8 +30,8 @@ tests =
         testArrayElemsFail
     , testProperty "Show for arrays"
         testShowArray
-
-    , testProperty "arrayElems (arrayUpdate x i v) ! i == v"
+    , testProperty "arrayElems (arrayUpdate x i v) !! i == v"
+        testArrayUpdateElem (Proxy :: Proxy 5)
     , testProperty "arrayUpdate (arrayUpdate x i v1) i v2 == arrayUpdate x i v2"
     , testProperty "arrayUpdate x i ((arrayElems x) ! i) == x"
     , testProperty "i1 /= i2 ==> arrayUpdate (arrayUpdate x i1 v1) i2 v2 == arrayUpdate (arrayUpdate x i2 v2) i1 v1"
@@ -66,3 +66,34 @@ testArrayElemsFail = expectFailure $ forAll (vector 3) $ \l ->
 testShowArray :: Property
 testShowArray = forAll (vector 3) $ \l -> property $
   show (array l :: Array 3 Int64) == show (l :: [Int64])
+
+-- | Test that updating an array updates the element appropriately (if we
+-- project that element we get the value we put in).
+testArrayUpdateElem :: forall n . KnownNat n => Proxy n -> Property
+testArrayUpdateElem len =
+    forAll xsInt64  $ \ls ->
+    forAll position $ \p ->
+    forAll xInt64   $ \v ->
+      let -- Original array
+          array' :: Array n Int64
+          array' = array ls
+
+          -- Updated array
+          array'' :: Array n Int64
+          array'' = arrayUpdate array' p v
+
+      in arrayElems array'' !! p == v
+
+  where
+
+    -- Generator for lists of Int64 of known length.
+    xsInt64 :: Gen [Int64]
+    xsInt64 = vectorOf (fromIntegral (natVal len)) arbitrary
+
+    -- Generator for element of type Int64.
+    xInt64 :: Gen Int64
+    xInt64 = arbitrary
+
+    -- Generator for positions within the list.
+    position :: Gen Int
+    position = chooseInt (0, fromIntegral (natVal len) - 1)
