@@ -30,6 +30,12 @@ tests =
         testArrayElemsFail
     , testProperty "Show for arrays"
         testShowArray
+
+    , testProperty "arrayElems (arrayUpdate x i v) ! i == v"
+    , testProperty "arrayUpdate (arrayUpdate x i v1) i v2 == arrayUpdate x i v2"
+    , testProperty "arrayUpdate x i ((arrayElems x) ! i) == x"
+    , testProperty "i1 /= i2 ==> arrayUpdate (arrayUpdate x i1 v1) i2 v2 == arrayUpdate (arrayUpdate x i2 v2) i1 v1"
+    , testProperty "arrayUpdate fails if out of range of array"
     ]
 
 -- * Individual tests
