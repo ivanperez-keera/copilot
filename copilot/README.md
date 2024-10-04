@@ -281,12 +281,26 @@ tutorial, please visit the Copilot website:
 # Contributions
 <sup>[(Back to top)](#table-of-contents)</sup>
 
-Copilot cannot accept pull requests or code contributions from developers
-outside the development team at this point.
+We'd love to receive your contributions, be it code fixes, new features, bug
+reports, discussions, or anything else that you think can help the Copilot
+community.
 
-If you have a question, find a bug, or would like to request a change, please
-file an issue adding as much information as you can to help us reproduce the
-error or identify the use case. Please file the issue with no labels.
+If you have any comments, questions, ideas, or other topics that you think may
+be of interest, start a new discussion
+[here](https://github.com/Copilot-Language/copilot/discussions).
+
+If you would like to contribute a fix for an issue, please comment on the issue
+indicating that you want to fix it so that we can track it and assign it to
+you.
+
+If you are unsure about whether your submission should be filed as an issue or
+as a discussion, file it as a discussion. We can always move it later.
+
+To facilitate merging any pull requests that you send, please make sure that
+you reference the issue you are addressing in every commit, that you describe
+in the commit messages what you are doing in each commit, and that you update
+the CHANGELOGs in the last commit(s). You can take a look at your commit
+history to better understand the process we follow.
 
 # Acknowledgements
 <sup>[(Back to top)](#table-of-contents)</sup>
