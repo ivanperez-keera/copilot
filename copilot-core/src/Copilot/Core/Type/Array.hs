@@ -33,11 +33,12 @@ instance Show t => Show (Array n t) where
 -- | Smart array constructor that only type checks if the length of the given
 -- list matches the length of the array at type level.
 array :: forall n t. KnownNat n => [t] -> Array n t
-array xs | datalen == typelen = Array xs
+array xs | datalen == typelen = p `seq` Array xs
          | otherwise          = error errmsg
   where
     datalen = length xs
-    typelen = fromIntegral $ natVal (Proxy :: Proxy n)
+    p = (Proxy :: Proxy n)
+    typelen = fromIntegral $ natVal p
     errmsg = "Length of data (" ++ show datalen ++
              ") does not match length of type (" ++ show typelen ++ ")."
 
