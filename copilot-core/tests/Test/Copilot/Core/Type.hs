@@ -1,4 +1,7 @@
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | Test copilot-core:Copilot.Core.Type.
 module Test.Copilot.Core.Type where
 
@@ -19,6 +22,11 @@ import Copilot.Core.Type       (Field (..), SimpleType (..), Struct (..),
                                 accessorName, fieldName, simpleType, typeLength,
                                 typeOf, typeSize)
 import Copilot.Core.Type.Array (Array)
+
+import Data.Proxy (Proxy(..))
+import Data.Type.Equality (TestEquality(..), (:~:)(..))
+import GHC.TypeLits (sameSymbol)
+import Prelude as P
 
 -- | All unit tests for copilot-core:Copilot.Core.Type.
 tests :: Test.Framework.Test
@@ -50,6 +58,8 @@ tests =
         testUTypesInequality
     , testProperty "inequality of utype via typeOf"
         testUTypesTypeOfInequality
+    , testProperty "inequality of arrays"
+        testTypesInequalityArrays
     , testProperty "fieldName matches field name (positive)"
         testFieldNameOk
     , testProperty "fieldName matches field name (negative)"
@@ -58,6 +68,10 @@ tests =
         testShowField
     , testProperty "Show struct"
         testShowStruct
+    , testProperty "Update struct"
+        testUpdateStruct
+    , testProperty "Update struct"
+        testUpdateStructFail
     , testProperty "accessorName matches field name (positive)"
         testAccessorNameOk
     , testProperty "accessorName matches field name (negative)"
@@ -96,7 +110,7 @@ testSimpleTypesInequality = forAllBlind twoDiffTypes $ \(t1, t2) ->
                 , simpleType Float
                 , simpleType Double
                 , simpleType (Array Int8 :: Type (Array 3 Int8))
-                , simpleType (Struct (S (Field 0)))
+                , simpleType (Struct (S (Field 0) (Field 0)))
                 ]
 
 -- | Test that the equality relation for simple types is reflexive.
@@ -177,12 +191,12 @@ testTypeSize2 = property $ typeSize a == 36
 -- | Test that equality is symmetric for UTypes via testEquality.
 testUTypesEqualitySymmetric :: Property
 testUTypesEqualitySymmetric =
-  forAllBlind (elements utypes) $ \(UType t1) -> isJust (testEquality t1 t1)
+  forAllBlind (elements utypes) $ \(UType t1) -> testEquality t1 t1 == Just Refl
 
 -- | Test that testEquality implies equality for UTypes.
 testUTypesEq :: Property
 testUTypesEq =
-  forAllBlind (elements utypes) $ \t@(UType t1) -> isJust (testEquality t1 t1) ==> t == t
+  forAllBlind (elements utypes) $ \t@(UType t1) -> (testEquality t1 t1 == Just Refl) ==> t == t
 
 -- | Test that any two different UTypes are not equal.
 --
@@ -198,6 +212,15 @@ testUTypesInequality = forAllBlind twoDiffTypes $ \(t1, t2) ->
       case shuffled of
         (t1:t2:_) -> return (t1, t2)
         _         -> return (UType Bool, UType Bool)
+
+testTypesInequalityArrays :: Property
+testTypesInequalityArrays = property $ testEquality a b == Nothing
+  where
+    a :: Type (Array 3 Int8)
+    a = Array Int8
+
+    b :: Type (Array 4 Int8)
+    b = Array Int8
 
 -- | Different UTypes.
 utypes :: [UType]
@@ -225,7 +248,7 @@ utypes =
     b = Array Int8
 
     c :: Type S
-    c = Struct (S (Field 0))
+    c = Struct (S (Field 0) (Field 0))
 
 -- | Test that any two different UTypes are not equal.
 --
@@ -259,47 +282,86 @@ uTypesTypeOf =
     , UType (typeOf :: Type Float)
     , UType (typeOf :: Type Double)
     , UType (typeOf :: Type (Array 3 Int8))
+    , UType (typeOf :: Type (Array 3 Int16))
+    , UType (typeOf :: Type (Array 3 Int32))
+    , UType (typeOf :: Type (Array 3 Int64))
+    , UType (typeOf :: Type (Array 3 Word8))
+    , UType (typeOf :: Type (Array 3 Word16))
+    , UType (typeOf :: Type (Array 3 Word32))
+    , UType (typeOf :: Type (Array 3 Word64))
+    , UType (typeOf :: Type (Array 3 Double))
+    , UType (typeOf :: Type (Array 3 Float))
     , UType (typeOf :: Type S)
     ]
 
 -- | Test the fieldName function (should succeed).
 testFieldNameOk :: Property
-testFieldNameOk = forAll arbitrary $ \k ->
-    fieldName (s1 (S (Field k))) == s1FieldName
+testFieldNameOk = forAll arbitrary $ \k1 ->
+                  forAll arbitrary $ \k2 ->
+    fieldName (s1 (S (Field k1) (Field k2))) == s1FieldName
   where
-    s1FieldName = "field"
+    s1FieldName = "field1"
 
 -- | Test the fieldName function (should fail).
 testFieldNameFail :: Property
 testFieldNameFail = expectFailure $ property $
     fieldName (s1 sampleS) == s1FieldName
   where
-    sampleS     = S (Field 0)
+    sampleS     = S (Field 0) (Field 0)
     s1FieldName = "Field"
 
 -- | Test showing a field of a struct.
 testShowField :: Property
 testShowField = forAll arbitrary $ \k ->
-  show (s1 (S (Field k))) == ("field:" ++ show k)
+  show (s1 (S (Field k) (Field 0))) == ("field1:" ++ show k)
 
 -- | Test showing a struct.
 testShowStruct :: Property
-testShowStruct = forAll arbitrary $ \k ->
-  show (S (Field k)) == "<field:" ++ show k ++ ">"
+testShowStruct = forAll arbitrary $ \k1 ->
+                 forAll arbitrary $ \k2 ->
+  show (S (Field k1) (Field k2)) == "<field1:" ++ show k1 ++ ",field2:" ++ show k2 ++ ">"
+
+-- | Test showing a struct.
+testUpdateStruct :: Property
+testUpdateStruct =
+   forAll arbitrary $ \k1 ->
+   forAll arbitrary $ \k2 ->
+     let f :: Field "field1" Int8
+         f = Field k2
+         v :: Value Int8
+         v = Value Int8 f
+     in unField (s1 (updateField (S (Field k1) (Field 0)) v)) == k2
+
+ where
+   unField (Field x) = x
+
+-- | Test showing a struct.
+testUpdateStructFail :: Property
+testUpdateStructFail = expectFailure $
+   forAll arbitrary $ \k1 ->
+   forAll arbitrary $ \k3 ->
+     let f :: Field "field" Int8
+         f = Field k3
+         v :: Value Int8
+         v = Value Int8 f
+     in unField (s3 (updateField (S3 (Field k1)) v)) == k3
+
+ where
+   unField (Field x) = x
 
 -- | Test the accessorName of a field of a struct (should succeed).
 testAccessorNameOk :: Property
 testAccessorNameOk = property $
     accessorName s1 == s1FieldName
   where
-    s1FieldName = "field"
+    s1FieldName = "field1"
 
 -- | Test the accessorName of a field of a struct (should fail).
 testAccessorNameFail :: Property
 testAccessorNameFail = expectFailure $ property $
     accessorName s1 == s1FieldName
   where
-    s1FieldName = "Field"
+    s1FieldName = "Field1"
 
 -- | Test the typeName of a struct (should succeed).
 testTypeNameOk :: Property
@@ -309,7 +371,7 @@ testTypeNameOk = property $
   where
 
     sampleS :: S
-    sampleS = S (Field 0)
+    sampleS = S (Field 0) (Field 0)
 
     s1TypeName :: String
     s1TypeName = "S"
@@ -322,18 +384,42 @@ testTypeNameFail = expectFailure $ property $
   where
 
     sampleS :: S
-    sampleS = S (Field 0)
+    sampleS = S (Field 0) (Field 0)
 
     s1TypeName :: String
     s1TypeName = "s"
 
 -- | Auxiliary struct defined for testing purposes.
-data S = S { s1 :: Field "field" Int8 }
+data S = S { s1 :: Field "field1" Int8, s2 :: Field "field2" Word8 }
 
 instance Struct S where
   typeName _ = "S"
 
-  toValues s = [ Value Int8 (s1 s) ]
+  toValues s = [ Value Int8 (s1 s), Value Word8 (s2 s) ]
+
+  updateField s (Value fieldTy (field :: Field fieldName a))
+    | Just Refl <- sameSymbol (Proxy @"field1") (Proxy @fieldName)
+    , Just Refl <- testEquality Int8 fieldTy
+    = s { s1 = field }
+    | Just Refl <- sameSymbol (Proxy @"field2") (Proxy @fieldName)
+    , Just Refl <- testEquality Word8 fieldTy
+    = s { s2 = field }
+    | otherwise
+    = error $ "Unexpected field: " P.++ show field
 
 instance Typed S where
-  typeOf = Struct (S (Field 0))
+  typeOf = Struct (S (Field 0) (Field 0))
+
+-- | Auxiliary struct defined for testing purposes.
+data S3 = S3 { s3 :: Field "field" Int8 }
+
+instance Struct S3 where
+  typeName _ = "S3"
+
+  toValues s = [ Value Int8 (s3 s) ]
+
+instance Typed S3 where
+  typeOf = Struct (S3 (Field 0))
+
+-- f = let UType {uTypeType = t } = UType Int8
+--     in 6
