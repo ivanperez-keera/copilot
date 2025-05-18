@@ -39,11 +39,17 @@ library
   build-depends: base             >= 4.9 && < 5
 
                , containers       >= 0.4   && < 0.9
+               , deepseq
                , mtl              >= 2.0   && < 2.4
                , parsec           >= 2.0   && < 3.2
+               , temporary
+
+               , copilot-core     >= 4.6.1 && < 4.7
                , copilot-language >= 4.6.1 && < 4.7
+               , copilot-theorem  >= 4.6.1 && < 4.7
 
   exposed-modules:
+      Copilot.Library.Analysis
       Copilot.Library.Libraries
     , Copilot.Library.Clocks
     , Copilot.Library.LTL
