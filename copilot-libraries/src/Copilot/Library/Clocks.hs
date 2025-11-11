@@ -90,3 +90,42 @@ clk1 ( Period period' ) ( Phase phase' ) =
                                        ( counter P.+ 1 )
                                        ( 0 )
                   in counter == fromIntegral phase'
+
+-- | True if a stream has been true repeatedly for a given number of samples.
+repeatedly :: Int64 -> Stream Bool -> Stream Bool
+repeatedly l s = s && (1 + clock - lastOn) >= lS
+  where
+    -- Constant stream with the value l.
+    lS = constant l
+
+    -- last time that s when from False to True.
+    lastOn = lastTime (risingEdge s)
+
+-- | True if a stream was true exactly a given number of samples ago.
+ago :: Int64 -> Stream Bool -> Stream Bool
+ago n s = replicate (fromIntegral n) False ++ s
+
+-- | Number of steps since the last time a stream was True.
+timeSinceLastTime :: Stream Bool -> Stream Int64
+timeSinceLastTime input = clock - lastTime input
+
+-- | Number of steps since the last time a stream was True.
+timeSinceLastTime' :: Stream Bool -> Stream Int64 Stream Int64
+timeSinceLastTime' input externalClock = externalClock - lastTime' input
+
+-- | Last time that some input stream when from False to True.
+lastTime :: Stream Bool -> Stream Int64
+lastTime input = g
+  where
+    g = if input then clock else ([0] ++ g)
+
+-- | Last time that some input stream when from False to True.
+lastTime' :: Stream Bool -> Stream Int64 -> Stream Int64
+lastTime' input externalClock = g
+  where
+    g = if input then externalClock else ([0] ++ g)
+
+-- | Discrete time, starting from zero.
+-- 0, 1, 2, 3, etc.
+clock :: Stream Int64
+clock = [0] ++ (clock + 1)
