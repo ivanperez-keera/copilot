@@ -1,3 +1,5 @@
+module Copilot.Library.Hybrid where
+
 -- | Module to write Copilot properties involving real clocks.
 
 -- | Discrete clock starting at zero.
@@ -34,5 +36,5 @@ lastTrue clock input = go
 -- | Delta between samples.
 --
 -- Assumes that the first sample starts at zero.
-delta :: Stream Int64 -> Stream Int64
+delta :: (Typed a, Num a) => Stream a -> Stream a
 delta x = x - ([0] ++ x)
