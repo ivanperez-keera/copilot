@@ -47,6 +47,10 @@ when_ = (==>)
 
 if_ :: Stream Bool -> Stream Bool -> Stream Bool
 if_ = (==>)
+ -- if in EARS is instantaneous, not continuous, so this should also
+ -- be if_ x y = risingEdge x ==> y
+ -- or risingEdge x ==> next y
+ -- or previous (risingEdge x) ==> y
 
 while_ :: Stream Bool -> Stream Bool -> Stream Bool
 while_ = (==>)
