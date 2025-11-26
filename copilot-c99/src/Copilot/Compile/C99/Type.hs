@@ -28,6 +28,8 @@ transType ty = case ty of
   Word16    -> C.TypeSpec $ C.TypedefName "uint16_t"
   Word32    -> C.TypeSpec $ C.TypedefName "uint32_t"
   Word64    -> C.TypeSpec $ C.TypedefName "uint64_t"
+  Enum _    -> C.TypeSpec $ C.TypedefName "uint64_t"
+  Wrapper t -> transType t
   Float     -> C.TypeSpec C.Float
   Double    -> C.TypeSpec C.Double
   Array ty' | typeLength ty == 0 -> errorZeroLengthArray
