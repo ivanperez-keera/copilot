@@ -2,8 +2,10 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE FunctionalDependencies    #-}
 {-# LANGUAGE GADTs                     #-}
 {-# LANGUAGE KindSignatures            #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE StandaloneDeriving        #-}
 {-# LANGUAGE Trustworthy               #-}
@@ -24,6 +26,7 @@ module Copilot.Core.Type
     , Typed (..)
     , typeOfDefault
     , UType (..)
+    , Wraps(..)
     , SimpleType (..)
 
     , typeSize
@@ -151,11 +154,18 @@ data Type :: * -> * where
   Word64 :: Type Word64
   Float  :: Type Float
   Double :: Type Double
+  Enum   :: (Enum a, Eq a) => a -> Type a
+  Wrapper :: (Eq a, Wraps a b, Typed b) => Type b -> Type a
   Array  :: forall n t . ( KnownNat n
                          , Typed t
                          ) => Type t -> Type (Array n t)
   Struct :: (Typed a, Struct a) => a -> Type a
-deriving instance Show (Type a)
+-- deriving instance Show (Type a)
+
+instance Show (Type a) where
+
+class Wraps a b | a -> b where
+  unwrap :: a -> b
 
 -- | Return the length of an array from its type
 typeLength :: forall n t . KnownNat n => Type (Array n t) -> Int

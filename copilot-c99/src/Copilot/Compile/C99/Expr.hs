@@ -15,7 +15,7 @@ import qualified Language.C99.Simple as C
 -- Internal imports: Copilot
 import Copilot.Core ( Array, Expr (..), Field (..), Op1 (..), Op2 (..),
                       Op3 (..), Type (..), Value (..), accessorName,
-                      arrayElems, toValues, typeLength, typeSize )
+                      arrayElems, toValues, typeLength, typeSize, Wraps(unwrap))
 
 -- Internal imports
 import Copilot.Compile.C99.Error ( impossible )
@@ -326,8 +326,10 @@ constTy ty = case ty of
   Word16    -> explicitTy ty . C.LitInt . fromIntegral
   Word32    -> explicitTy ty . C.LitInt . fromIntegral
   Word64    -> explicitTy ty . C.LitInt . fromIntegral
+  Enum _    -> explicitTy ty . C.LitInt . fromIntegral . fromEnum
   Float     -> explicitTy ty . C.LitFloat
   Double    -> explicitTy ty . C.LitDouble
+  Wrapper t -> constTy t . unwrap
   Struct _  -> C.InitVal (transTypeName ty) . constStruct . toValues
   Array ty' -> C.InitVal (transTypeName ty) . constArray ty' . arrayElems
 
