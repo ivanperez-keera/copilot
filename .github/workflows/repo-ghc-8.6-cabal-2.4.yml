@@ -44,9 +44,11 @@ jobs:
         cabal v2-install --lib copilot copilot-core copilot-c99 copilot-language copilot-libraries copilot-theorem copilot-interpreter copilot-prettyprinter
 
     - name: Test packages
+      if: matrix.ghc == '8.10.4'
       run: |
-        if [ "${GHCVER}" == "8.10.4" ]; then cabal v2-test -j1 copilot-core copilot-language copilot-interpreter copilot-c99 copilot-theorem copilot-libraries; fi
+        cabal v2-test -j1 copilot-core copilot-language copilot-interpreter copilot-c99 copilot-theorem copilot-libraries
 
     - name: Check cpp
+      if: matrix.ghc == '8.10.4'
       run: |
-        if [ "${GHCVER}" == "8.10.4" ]; then runhaskell copilot/examples/Heater.hs; cppcheck --force --addon=misra.py --suppress=misra-c2012-14.4 --error-exitcode=2 heater.c; fi
+        runhaskell copilot/examples/Heater.hs; cppcheck --force --addon=misra.py --suppress=misra-c2012-14.4 --error-exitcode=2 heater.c
