@@ -1,0 +1,52 @@
+name: install-test
+
+# Trigger the workflow on push or pull request
+on:
+  - pull_request
+  - push
+
+jobs:
+  cabal:
+    name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        cabal: ["2.4", "3.2", "3.4"]
+        ghc:
+          - "8.6.5"
+          - "8.8.4"
+          - "8.10.4"
+          - "9.0.1"
+
+    steps:
+
+    - uses: haskell-actions/setup@main
+      id: setup-haskell-cabal
+      name: Setup Haskell
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ matrix.cabal }}
+
+    - name: Prepare environment
+      run: |
+        echo "$HOME/.ghcup/bin" >> $GITHUB_PATH
+        echo "$HOME/.cabal/bin" >> $GITHUB_PATH
+
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get install -y cppcheck
+
+    - name: Install copilot
+      run: |
+        cabal v2-install --lib copilot copilot-core copilot-c99 copilot-language copilot-libraries copilot-theorem copilot-interpreter copilot-prettyprinter
+
+    - name: Test packages
+      run: |
+        if [ "${GHCVER}" == "8.10.4" ]; then cabal v2-test -j1 copilot-core copilot-language copilot-interpreter copilot-c99 copilot-theorem copilot-libraries; fi
+
+    - name: Check cpp
+      run: |
+        if [ "${GHCVER}" == "8.10.4" ]; then runhaskell copilot/examples/Heater.hs; cppcheck --force --addon=misra.py --suppress=misra-c2012-14.4 --error-exitcode=2 heater.c; fi
