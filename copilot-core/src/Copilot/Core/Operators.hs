@@ -53,7 +53,7 @@ data Op1 a b where
   -- Bitwise operators.
   BwNot    :: Bits a => Type a -> Op1 a a
   -- Casting operator.
-  Cast     :: (Integral a, Num b) => Type a -> Type b -> Op1 a b
+  Cast     :: (a -> b) -> Type a -> Type b -> Op1 a b
               -- ^ Casting operator.
 
   -- Struct operator.
