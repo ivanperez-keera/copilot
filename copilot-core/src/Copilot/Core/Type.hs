@@ -28,6 +28,7 @@ module Copilot.Core.Type
 
     , typeSize
     , typeLength
+    , dyntypeLength
 
     , Value (..)
     , toValues
@@ -41,6 +42,10 @@ module Copilot.Core.Type
     , accessorName
     , updateField
     , updateFieldDefault
+    , DynArray'(..)
+    , typeMaxLength
+    , dynArrayElems
+    , dynarray
     )
   where
 
@@ -57,9 +62,12 @@ import GHC.Generics       (Datatype (..), D1, Generic (..), K1 (..), M1 (..),
                            U1 (..), (:*:) (..))
 import GHC.TypeLits       (KnownNat, KnownSymbol, Symbol, natVal, sameNat,
                            sameSymbol, symbolVal)
+-- External imports
+import Data.Proxy   (Proxy (..))
+import GHC.TypeLits (KnownNat, Nat, natVal, type(-))
 
 -- Internal imports
-import Copilot.Core.Type.Array (Array)
+import Copilot.Core.Type.Array (Array, arrayElems, array)
 
 -- | The value of that is a product or struct, defined as a constructor with
 -- several fields.
@@ -155,11 +163,41 @@ data Type :: * -> * where
                          , Typed t
                          ) => Type t -> Type (Array n t)
   Struct :: (Typed a, Struct a) => a -> Type a
+  DynArray :: forall n t . ( KnownNat n
+                           , Typed t
+                           ) => Type t -> Type (DynArray' n t)
+
 deriving instance Show (Type a)
+
+data DynArray' (n :: Nat) t = DynArray'
+  { maxLen :: Int32
+  , vals   :: Array n t
+  }
+
+-- | Smart array constructor that only type checks if the length of the given
+-- list matches the length of the array at type level.
+dynarray :: forall n t. KnownNat n => [t] -> DynArray' n t
+dynarray xs | datalen == typelen = DynArray' (fromIntegral datalen) (array xs)
+            | otherwise          = error errmsg
+  where
+    datalen = length xs
+    typelen = fromIntegral $ natVal (Proxy :: Proxy n)
+    errmsg = "Length of data (" ++ show datalen ++
+             ") does not match length of type (" ++ show typelen ++ ")."
+
+dynArrayElems :: DynArray' n t -> [t]
+dynArrayElems d = take (fromIntegral $ maxLen d) $ arrayElems (vals d)
+
+typeMaxLength :: forall n t. KnownNat n => Type (DynArray' n t) -> Int
+typeMaxLength _ = fromIntegral $ natVal (Proxy @n)
 
 -- | Return the length of an array from its type
 typeLength :: forall n t . KnownNat n => Type (Array n t) -> Int
 typeLength _ = fromIntegral $ natVal (Proxy :: Proxy n)
+
+-- | Return the length of an array from its type
+dyntypeLength :: forall n t . KnownNat n => Type (DynArray' n t) -> Int
+dyntypeLength _ = fromIntegral $ natVal (Proxy :: Proxy n)
 
 -- | Return the total (nested) size of an array from its type
 typeSize :: forall n t . KnownNat n => Type (Array n t) -> Int
@@ -287,6 +325,12 @@ instance Typed Double where
 instance (Typeable t, Typed t, KnownNat n) => Typed (Array n t) where
   typeOf               = Array typeOf
   simpleType (Array t) = SArray t
+
+instance (Typeable t, Typed t, KnownNat n) => Typed (DynArray' n t) where
+  typeOf = DynArray typeOf
+
+instance Show t => Show (DynArray' n t) where
+  show (DynArray' n xs) = show (n, xs)
 
 -- | A untyped type (no phantom type).
 data UType = forall a . Typeable a => UType (Type a)
