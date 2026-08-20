@@ -8,6 +8,9 @@
 module Main where
 
 import Language.Copilot
+import Copilot.Language.Stream
+import Copilot.Core.Operators
+import qualified Copilot.Core.Type as Ty
 import Copilot.Compile.C99
 
 import Prelude hiding ((>), (<), div)
@@ -20,7 +23,10 @@ temp = extern "temperature" Nothing
 -- We need to cast the Word8 to a Float. Note that it is an unsafeCast, as there
 -- is no direct relation between Word8 and Float.
 ctemp :: Stream Float
-ctemp = (unsafeCast temp) * (150.0 / 255.0) - 50.0
+ctemp = function ((unsafeCast temp) * (150.0 / 255.0) - 50.0)
+
+function :: Stream Float -> Stream Float
+function = Op1 (ExternFun1 "inc" Ty.Float Ty.Float)
 
 spec = do
   -- Triggers that fire when the ctemp is too low or too high,
