@@ -57,6 +57,9 @@ import GHC.Generics       (Datatype (..), D1, Generic (..), K1 (..), M1 (..),
                            U1 (..), (:*:) (..))
 import GHC.TypeLits       (KnownNat, KnownSymbol, Symbol, natVal, sameNat,
                            sameSymbol, symbolVal)
+-- External imports
+import Data.Proxy   (Proxy (..))
+import GHC.TypeLits (KnownNat, Nat, natVal, type(-))
 
 -- Internal imports
 import Copilot.Core.Type.Array (Array)
@@ -155,7 +158,16 @@ data Type :: * -> * where
                          , Typed t
                          ) => Type t -> Type (Array n t)
   Struct :: (Typed a, Struct a) => a -> Type a
+  DynArray :: forall n t . ( KnownNat n
+                           , Typed t
+                           ) => Type t -> Type (DynArray' n t)
+
 deriving instance Show (Type a)
+
+data DynArray' (n :: Nat) t = forall n t . KnownNat n => DynArray'
+  { maxLen :: Int32
+  , vals   :: Array n t
+  }
 
 -- | Return the length of an array from its type
 typeLength :: forall n t . KnownNat n => Type (Array n t) -> Int
