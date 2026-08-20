@@ -60,6 +60,8 @@ data Op1 a b where
   GetField :: KnownSymbol s => Type a -> Type b -> (a -> Field s b) -> Op1 a b
               -- ^ Projection of a struct field.
 
+  ExternFun1 :: String -> Type a -> Type b -> Op1 a b
+
 -- | Binary operators.
 data Op2 a b c where
   -- Boolean operators.
@@ -102,6 +104,8 @@ data Op2 a b c where
               => Type a -> Type b -> (a -> Field s b) -> Op2 a b a
               -- ^ Update a field of a struct.
 
+  ExternFun2 :: String -> Type a -> Type b -> Type c -> Op2 a b c
+
 -- | Ternary operators.
 data Op3 a b c d where
   -- Conditional operator.
@@ -109,3 +113,5 @@ data Op3 a b c d where
   -- Array operator.
   UpdateArray :: Type (Array n t) -> Op3 (Array n t) Word32 t (Array n t)
            -- ^ Update an element of an array.
+
+  ExternFun3 :: String -> Type a -> Type b -> Type c -> Type d -> Op3 a b c d
