@@ -28,10 +28,18 @@ ctemp = function ((unsafeCast temp) * (150.0 / 255.0) - 50.0)
 function :: Stream Float -> Stream Float
 function = Op1 (ExternFun1 "inc" Ty.Float Ty.Float)
 
+function2 :: Stream Float -> Stream Bool
+function2 = Op1 arbitraryCast
+
+arbitraryCast :: Op1 Float Bool
+arbitraryCast = Cast undefined typeOf typeOf
+
+condition = function2 ctemp
+
 spec = do
   -- Triggers that fire when the ctemp is too low or too high,
   -- pass the current ctemp as an argument.
-  trigger "heaton"  (ctemp < 18.0) [arg ctemp]
+  trigger "heaton"  (condition) [arg ctemp]
   trigger "heatoff" (ctemp > 21.0) [arg ctemp]
 
 -- Compile the spec
