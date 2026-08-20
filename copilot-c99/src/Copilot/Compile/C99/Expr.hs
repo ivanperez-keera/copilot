@@ -181,7 +181,7 @@ transOp1 op e =
     Ceiling  ty   -> funCall (specializeMathFunName ty "ceil") [e]
     Floor    ty   -> funCall (specializeMathFunName ty "floor") [e]
     BwNot    _    -> (C..~) e
-    Cast     _ ty -> C.Cast (transTypeName ty) e
+    Cast   _ _ ty -> C.Cast (transTypeName ty) e
     GetField (Struct _)  _ f -> C.Dot e (accessorName f)
     ExternFun1 name ty1 ty2 -> funCall name [e]
 
