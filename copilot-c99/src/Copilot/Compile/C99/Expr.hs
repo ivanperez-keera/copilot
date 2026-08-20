@@ -183,6 +183,7 @@ transOp1 op e =
     BwNot    _    -> (C..~) e
     Cast     _ ty -> C.Cast (transTypeName ty) e
     GetField (Struct _)  _ f -> C.Dot e (accessorName f)
+    ExternFun1 name ty1 ty2 -> funCall name [e]
 
 -- | Translates a Copilot binary operator and its arguments into a C99
 -- expression.
@@ -215,6 +216,7 @@ transOp2 op e1 e2 = case op of
   BwShiftR    _ _   -> e1 C..>> e2
   Index       _     -> C.Index e1 e2
   UpdateField _ _ _ -> impossible "transOp2" "copilot-c99"
+  ExternFun2 name ty1 ty2 ty3 -> funCall name [e1, e2]
 
 -- | Translates a Copilot ternary operator and its arguments into a C99
 -- expression.
@@ -222,6 +224,7 @@ transOp3 :: Op3 a b c d -> C.Expr -> C.Expr -> C.Expr -> C.Expr
 transOp3 op e1 e2 e3 = case op of
   Mux         _ -> C.Cond e1 e2 e3
   UpdateArray _ -> impossible "transOp3" "copilot-c99"
+  ExternFun3 name ty1 ty2 ty3 t4 -> funCall name [e1, e2, e3]
 
 -- | Translate @'Abs' e@ in Copilot Core into a C99 expression.
 --
