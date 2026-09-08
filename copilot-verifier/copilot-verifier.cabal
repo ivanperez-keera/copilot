@@ -40,7 +40,7 @@ common bldflags
   default-extensions:
      NondecreasingIndentation
   build-depends:
-    aeson >= 1.5 && < 2.3,
+    aeson >= 1.5 && < 2.4,
     base >= 4.8 && < 4.20,
     bv-sized >= 1.0.0 && < 1.1,
     bytestring,
@@ -57,7 +57,7 @@ common bldflags
     llvm-pretty >= 0.12.1.0 && < 0.13,
     mtl,
     panic >= 0.3,
-    parameterized-utils >= 2.1.4 && < 2.2,
+    parameterized-utils >= 2.1.4 && < 2.4,
     prettyprinter >= 1.7.0,
     text,
     transformers,
