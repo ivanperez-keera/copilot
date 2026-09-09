@@ -70,7 +70,6 @@ library
                           , Copilot.Theorem.Prove
                           , Copilot.Theorem.Kind2
                           , Copilot.Theorem.Prover.SMT
-                          -- , Copilot.Theorem.Prover.Z3
                           , Copilot.Theorem.Kind2.Prover
                           , Copilot.Theorem.What4
 
