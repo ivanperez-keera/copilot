@@ -1,3 +1,6 @@
+2026-09-08
+        * Replace tabs with spaces in `DESIGN.md`.
+
 2026-09-07
         * Version bump (4.8.1). (#760)
         * Replace tab in CHANGELOG. (#755)
