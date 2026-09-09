@@ -49,7 +49,7 @@ common bldflags
     copilot-core >= 4.8.1 && < 4.9,
     copilot-theorem >= 4.8.1 && < 4.9,
     crucible >= 0.7.1 && < 0.8,
-    crucible-llvm >= 0.7 && < 0.8,
+    crucible-llvm >= 0.7 && < 0.10,
     crux >= 0.7.1 && < 0.8,
     crux-llvm >= 0.9 && < 0.13,
     filepath,
