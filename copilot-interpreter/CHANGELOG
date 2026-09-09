@@ -1,3 +1,6 @@
+2026-09-08
+        * Replace tabs with spaces in `Copilot.Interpreter.Eval`.
+
 2026-09-07
         * Version bump (4.8.1). (#760)
 
