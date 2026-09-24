@@ -12,6 +12,7 @@ module Copilot.Compile.C99.Type
 import qualified Language.C99.Simple as C
 
 -- Internal imports: Copilot
+import Copilot.Core.Type (dyntypeLength)
 import Copilot.Core              ( Struct (..), Type (..), typeLength,
                                    typeName )
 import Copilot.Compile.C99.Error ( errorEmptyStruct, errorZeroLengthArray )
@@ -34,6 +35,10 @@ transType ty = case ty of
             | otherwise          -> C.Array (transType ty') len
     where
       len = Just $ C.LitInt $ fromIntegral $ typeLength ty
+  DynArray ty' | dyntypeLength ty == 0 -> errorZeroLengthArray
+               | otherwise             -> C.Array (transType ty') len
+    where
+      len = Just $ C.LitInt $ fromIntegral $ dyntypeLength ty
   Struct s  | null (toValues s) -> errorEmptyStruct
             | otherwise         -> C.TypeSpec $ C.Struct (typeName s)
 
