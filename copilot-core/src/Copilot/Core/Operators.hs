@@ -19,7 +19,7 @@ import Data.Word     (Word32)
 import GHC.TypeLits  (KnownSymbol)
 
 -- Internal imports
-import Copilot.Core.Type       (Field (..), Type (..))
+import Copilot.Core.Type       (Field (..), Type (..), DynArray')
 import Copilot.Core.Type.Array (Array)
 
 -- | Unary operators.
@@ -97,6 +97,9 @@ data Op2 a b c where
   BwShiftR :: (Bits a, Integral b) => Type a -> Type b -> Op2 a b a
   -- Array operator.
   Index    :: Type (Array n t) -> Op2 (Array n t) Word32 t
+              -- ^ Array access/projection of an array element.
+
+  IndexD   :: Type (DynArray' n t) -> Op2 (DynArray' n t) Word32 t
               -- ^ Array access/projection of an array element.
 
   -- Struct operator.
