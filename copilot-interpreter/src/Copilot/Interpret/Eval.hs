@@ -208,7 +208,7 @@ evalOp1 op = case op of
     Ceiling _  -> P.fromIntegral . idI . P.ceiling
     Floor _    -> P.fromIntegral . idI . P.floor
     BwNot _    -> complement
-    Cast _ _   -> P.fromIntegral
+    Cast f _ _   -> f
     GetField (Struct _) _ f -> unfield . f
   where
     -- Used to help GHC pick a return type for ceiling/floor
