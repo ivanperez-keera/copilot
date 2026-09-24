@@ -12,9 +12,10 @@ module Copilot.Language.Operators.Array
   , (!!)
   , (=:)
   , (=$)
+  , dI
   ) where
 
-import Copilot.Core                          (Array, Op2 (Index),
+import Copilot.Core                          (Array, DynArray', Op2 (Index, IndexD),
                                               Op3 (UpdateArray), Typed, typeOf)
 import Copilot.Language.Operators.Projection (Projectable(..))
 import Copilot.Language.Stream               (Stream (..))
@@ -32,6 +33,10 @@ import Prelude      hiding ((!!))
 (!) :: (KnownNat n, Typed t)
     => Stream (Array n t) -> Stream Word32 -> Stream t
 arr ! n = Op2 (Index typeOf) arr n
+
+dI :: (KnownNat n, Typed t)
+    => Stream (DynArray' n t) -> Stream Word32 -> Stream t
+dI arr n = Op2 (IndexD typeOf) arr n
 
 -- | Pair a stream with an element accessor, without applying it to obtain the
 -- value of the element.
