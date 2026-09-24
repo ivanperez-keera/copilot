@@ -17,6 +17,8 @@ import Copilot.Core ( Array, Expr (..), Field (..), Op1 (..), Op2 (..),
                       Op3 (..), Type (..), Value (..), accessorName,
                       arrayElems, toValues, typeLength, typeSize )
 
+import Copilot.Core.Type (dynArrayElems)
+
 -- Internal imports
 import Copilot.Compile.C99.Error ( impossible, errorEmptyStruct, errorZeroLengthArray )
 import Copilot.Compile.C99.Name  ( exCpyName, streamAccessorName )
@@ -215,6 +217,7 @@ transOp2 op e1 e2 = case op of
   BwShiftL    _ _   -> e1 C..<< e2
   BwShiftR    _ _   -> e1 C..>> e2
   Index       _     -> C.Index e1 e2
+  IndexD      _     -> C.Index e1 e2
   UpdateField _ _ _ -> impossible "transOp2" "copilot-c99"
   ExternFun2 name ty1 ty2 ty3 -> funCall name [e1, e2]
 
@@ -333,6 +336,7 @@ constTy ty = case ty of
   Double    -> explicitTy ty . C.LitDouble
   Struct _  -> C.InitVal (transTypeName ty) . constStruct . toValues
   Array ty' -> C.InitVal (transTypeName ty) . constArray ty' . arrayElems
+  DynArray ty' -> C.InitVal (transTypeName ty) . constArray ty' . dynArrayElems
 
 -- | Transform a Copilot Core literal, based on its value and type, into a C99
 -- initializer.
