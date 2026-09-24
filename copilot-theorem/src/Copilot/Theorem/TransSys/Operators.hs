@@ -167,7 +167,7 @@ handleOp1 resT (op, e) handleExpr notHandledF mkOp = case op of
   C.BwNot ta -> notHandled ta "bwnot"
 
   -- Casting operator.
-  C.Cast _ tb -> castTo tb
+  C.Cast _ _ tb -> castTo tb
 
   where
     boolOp :: Op1 Bool -> m (expr Bool) -> m (expr resT)
