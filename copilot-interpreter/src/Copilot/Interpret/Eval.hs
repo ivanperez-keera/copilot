@@ -21,6 +21,7 @@ import Copilot.Core            (Expr (..), Field (..), Id, Name, Observer (..),
                                 Trigger (..), Type (..), UExpr (..), Value (..),
 				arrayElems, arrayUpdate, specObservers,
                                 specStreams, specTriggers, updateField)
+import Copilot.Core.Type       (dynArrayElems, maxLen)
 import Copilot.Interpret.Error (badUsage)
 
 import           Prelude hiding (id)
@@ -246,6 +247,7 @@ evalOp2 op = case op of
   BwShiftL _ _ -> ( \ !a !b -> shiftL a $! fromIntegral b )
   BwShiftR _ _ -> ( \ !a !b -> shiftR a $! fromIntegral b )
   Index    _   -> \xs n -> (arrayElems xs) !! (fromIntegral n)
+  IndexD   _   -> \xs n -> if fromIntegral n >= maxLen xs then error "No" else (dynArrayElems xs) !! (fromIntegral n)
 
   UpdateField (Struct _) ty (fieldAccessor :: a -> Field s b) ->
     \stream fieldValue ->
