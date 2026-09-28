@@ -16,6 +16,7 @@ module Copilot.Library.Libraries (
   , module Copilot.Library.Utils
   , module Copilot.Library.Voting
   , module Copilot.Library.Stacks
+  , module Copilot.Library.Vector
   ) where
 
 import Copilot.Library.Clocks
@@ -26,3 +27,4 @@ import Copilot.Library.RegExp
 import Copilot.Library.Utils
 import Copilot.Library.Voting
 import Copilot.Library.Stacks
+import Copilot.Library.Vector
