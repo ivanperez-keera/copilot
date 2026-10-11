@@ -14,19 +14,22 @@ import Copilot.Language                 ( Array, Stream, Typed, Word32, array,
                                           arrayElems, constant, sqrt )
 import Copilot.Language.Operators.Array ( (!!), (!), (=:) )
 
-magnitude :: Stream (Array 3 Float) -> Stream Float
+magnitude :: (Eq a, Num a, Typed a, Floating a) => Stream (Array 3 a) -> Stream a
 magnitude v = sqrt (x * x + y * y + z * z)
   where
     x = v ! 0
     y = v ! 1
     z = v ! 2
 
+arrayS :: forall a n . (KnownNat n, Num a, Typed a)
+       => [Stream a] -> Stream (Array n a)
 arrayS = makeA 0 . array
 
-vector3 :: Stream Float
-        -> Stream Float
-        -> Stream Float
-        -> Stream (Array 3 Float)
+vector3 :: (Num a, Typed a)
+        => Stream a
+        -> Stream a
+        -> Stream a
+        -> Stream (Array 3 a)
 vector3 x y z = arrayS [x, y, z]
 
 makeA :: forall a n . (KnownNat n, Typed a) => a -> Array n (Stream a) -> Stream (Array n a)
@@ -43,9 +46,10 @@ makeA def xs = foldl updatePos initialArray indexedElems
 
     n = fromIntegral $ natVal (Proxy :: Proxy n)
 
-crossProduct :: Stream (Array 3 Float)
-             -> Stream (Array 3 Float)
-             -> Stream (Array 3 Float)
+crossProduct :: (Eq a, Num a, Typed a, Floating a)
+             => Stream (Array 3 a)
+             -> Stream (Array 3 a)
+             -> Stream (Array 3 a)
 crossProduct a b = arrayS
     [ ay * bz - az * by
     , az * bx - ax * bz
@@ -60,9 +64,10 @@ crossProduct a b = arrayS
     by = b ! 1
     bz = b ! 2
 
-(^-^) :: Stream (Array 3 Float)
-      -> Stream (Array 3 Float)
-      -> Stream (Array 3 Float)
+(^-^) :: (Eq a, Num a, Typed a, Floating a)
+      => Stream (Array 3 a)
+      -> Stream (Array 3 a)
+      -> Stream (Array 3 a)
 (^-^) a b = arrayS
     [ ax - bx
     , ay - by
