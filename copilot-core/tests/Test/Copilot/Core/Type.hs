@@ -7,6 +7,7 @@ module Test.Copilot.Core.Type where
 
 -- External imports
 import Data.Int                             (Int16, Int32, Int64, Int8)
+import Data.List                            (intercalate)
 import Data.Maybe                           (isJust)
 import Data.Proxy                           (Proxy (..))
 import Data.Type.Equality                   (TestEquality (..), testEquality,
@@ -18,6 +19,7 @@ import Test.Framework                       (Test, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck                      (Gen, Property, arbitrary, elements,
                                              expectFailure, forAll, forAllBlind,
+                                             getNonNegative, listOf1,
                                              property, shuffle, (==>))
 
 -- Internal imports: library modules being tested
@@ -49,6 +51,12 @@ tests =
         testTypeSize1
     , testProperty "typeSize matches full array size for 2-dimensional arrays"
         testTypeSize2
+    , testProperty "show for types"
+        testTypeShow
+    , testProperty "show prec for types"
+        testTypeShowsPrec
+    , testProperty "show list for types"
+        testTypeShowList
     , testProperty "equality of types"
         testUTypesEqualitySymmetric
     , testProperty "equality of utype"
@@ -65,8 +73,16 @@ tests =
         testFieldNameFail
     , testProperty "Show field name"
         testShowField
+    , testProperty "Show field precedence name"
+        testShowsPrecField
+    , testProperty "Show field list"
+        testShowListField
     , testProperty "Show struct"
         testShowStruct
+    , testProperty "Shows prec struct"
+        testShowsPrecStruct
+    , testProperty "Show list struct"
+        testShowListStruct
     , testProperty "Update struct"
         testUpdateStruct
     , testProperty "Update struct"
@@ -227,6 +243,24 @@ testTypesInequality = forAllBlind twoDiffTypes $ \(UType t1, UType t2) ->
         (t1:t2:_) -> return (t1, t2)
         _         -> return (UType Bool, UType Bool)
 
+testTypeShow :: Property
+testTypeShow = property $ show a == "Array (Array Int8)"
+  where
+    a :: Type (Array 3 (Array 12 Int8))
+    a = Array (Array Int8)
+
+testTypeShowsPrec :: Property
+testTypeShowsPrec = property $ showsPrec 0 a "" == defaultShowsPrec 0 a ""
+  where
+    a :: Type (Array 3 (Array 12 Int8))
+    a = Array (Array Int8)
+
+testTypeShowList :: Property
+testTypeShowList = property $ showList a "" == defaultShowList a ""
+  where
+    a :: [ Type (Array 3 (Array 12 Int8)) ]
+    a = [ Array (Array Int8) ]
+
 -- | Different UTypes.
 utypes :: [UType]
 utypes =
@@ -344,11 +378,39 @@ testShowField :: Property
 testShowField = forAll arbitrary $ \k ->
   show (s1 (S (Field k) (Field 0))) == ("field1:" ++ show k)
 
+-- | Test showing a field of a struct.
+testShowsPrecField :: Property
+testShowsPrecField = forAll (getNonNegative <$> arbitrary) $ \prec ->
+                     forAll arbitrary $ \k ->
+  let v = (s1 (S (Field k) (Field 0)))
+  in showsPrec prec v "" == defaultShowsPrec prec v "" -- "field1:" ++ show k
+
+-- | Test showing a field of a struct.
+testShowListField :: Property
+testShowListField = forAll (listOf1 arbitrary) $ \l -> property $
+  let v = map (\k -> s1 (S (Field k) (Field 0))) l
+  in showList v "" == defaultShowList v ""
+  -- let x = showList (map (\k -> s1 (S (Field k) (Field 0))) l) ""
+  --     y = "[" ++ intercalate "," (map (\k -> ("field1:" ++ show k)) l) ++ "]"
+  -- in x == y
+
 -- | Test showing a struct.
 testShowStruct :: Property
 testShowStruct = forAll arbitrary $ \k1 ->
                  forAll arbitrary $ \k2 ->
   show (S (Field k1) (Field k2)) == "<field1:" ++ show k1 ++ ",field2:" ++ show k2 ++ ">"
+
+testShowsPrecStruct :: Property
+testShowsPrecStruct = forAll (getNonNegative <$> arbitrary) $ \prec ->
+                      forAll arbitrary $ \k1 ->
+                      forAll arbitrary $ \k2 ->
+  showsPrec prec (S (Field k1) (Field k2)) "" == "<field1:" ++ show k1 ++ ",field2:" ++ show k2 ++ ">"
+
+testShowListStruct :: Property
+testShowListStruct = forAll (listOf1 arbitrary) $ \l ->
+  let x = showList (map (\(k1, k2) -> (S (Field k1) (Field k2))) l) ""
+      y = "[" ++ intercalate "," (map (\(k1, k2) -> "<field1:" ++ show k1 ++ ",field2:" ++ show k2 ++ ">") l) ++ "]"
+  in x == y
 
 -- | Test showing a struct.
 testUpdateStruct :: Property
@@ -449,3 +511,9 @@ instance Struct S3 where
 
 instance Typed S3 where
   typeOf = Struct (S3 (Field 0))
+
+defaultShowList :: Show a => [a] -> String -> String
+defaultShowList l s = "[" ++ intercalate "," (map show l) ++ "]" ++ s
+
+defaultShowsPrec :: Show a => Int -> a -> String -> String
+defaultShowsPrec _ x s = show x ++ s

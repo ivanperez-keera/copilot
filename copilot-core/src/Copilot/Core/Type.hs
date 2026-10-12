@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns              #-}
 {-# LANGUAGE DataKinds                 #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts          #-}
@@ -116,13 +117,13 @@ data Field (s :: Symbol) t = Field t
 
 -- | Extract the name of a field.
 fieldName :: forall s t . KnownSymbol s => Field s t -> String
-fieldName _ = symbolVal (Proxy :: Proxy s)
+fieldName (!_) = symbolVal $! (Proxy :: Proxy s)
 
 -- | Extract the name of an accessor (a function that returns a field of a
 -- struct).
 accessorName :: forall a s t . (Struct a, KnownSymbol s)
              => (a -> Field s t) -> String
-accessorName _ = symbolVal (Proxy :: Proxy s)
+accessorName _ = symbolVal $! (Proxy :: Proxy s)
 
 instance (KnownSymbol s, Show t) => Show (Field s t) where
   show f@(Field v) = fieldName f ++ ":" ++ show v
@@ -159,7 +160,7 @@ deriving instance Show (Type a)
 
 -- | Return the length of an array from its type
 typeLength :: forall n t . KnownNat n => Type (Array n t) -> Int
-typeLength _ = fromIntegral $ natVal (Proxy :: Proxy n)
+typeLength (!_) = fromIntegral $ natVal $! (Proxy :: Proxy n)
 
 -- | Return the total (nested) size of an array from its type
 typeSize :: forall n t . KnownNat n => Type (Array n t) -> Int
@@ -187,7 +188,7 @@ instance TestEquality Type where
                         -> Type a2
                         -> Maybe (Array n1 a1 :~: Array n2 a2)
       testArrayEquality ty1 ty2
-        | Just DE.Refl <- sameNat (Proxy :: Proxy n1) (Proxy :: Proxy n2)
+        | Just DE.Refl <- (sameNat $! (Proxy :: Proxy n1)) $! (Proxy :: Proxy n2)
         , Just DE.Refl <- testEquality ty1 ty2
         = Just DE.Refl
         | otherwise
@@ -238,61 +239,61 @@ instance Eq SimpleType where
 class (Show a, Typeable a) => Typed a where
   typeOf     :: Type a
   simpleType :: Type a -> SimpleType
-  simpleType _ = SStruct
+  simpleType (!_) = SStruct
 
 instance Typed Bool where
-  typeOf       = Bool
-  simpleType _ = SBool
+  typeOf          = Bool
+  simpleType (!_) = SBool
 
 instance Typed Int8 where
-  typeOf       = Int8
-  simpleType _ = SInt8
+  typeOf          = Int8
+  simpleType (!_) = SInt8
 
 instance Typed Int16 where
-  typeOf       = Int16
-  simpleType _ = SInt16
+  typeOf          = Int16
+  simpleType (!_) = SInt16
 
 instance Typed Int32 where
-  typeOf       = Int32
-  simpleType _ = SInt32
+  typeOf          = Int32
+  simpleType (!_) = SInt32
 
 instance Typed Int64 where
-  typeOf       = Int64
-  simpleType _ = SInt64
+  typeOf          = Int64
+  simpleType (!_) = SInt64
 
 instance Typed Word8 where
-  typeOf       = Word8
-  simpleType _ = SWord8
+  typeOf          = Word8
+  simpleType (!_) = SWord8
 
 instance Typed Word16 where
-  typeOf       = Word16
-  simpleType _ = SWord16
+  typeOf          = Word16
+  simpleType (!_) = SWord16
 
 instance Typed Word32 where
-  typeOf       = Word32
-  simpleType _ = SWord32
+  typeOf          = Word32
+  simpleType (!_) = SWord32
 
 instance Typed Word64 where
-  typeOf       = Word64
-  simpleType _ = SWord64
+  typeOf          = Word64
+  simpleType (!_) = SWord64
 
 instance Typed Float where
-  typeOf       = Float
-  simpleType _ = SFloat
+  typeOf          = Float
+  simpleType (!_) = SFloat
 
 instance Typed Double where
   typeOf       = Double
-  simpleType _ = SDouble
+  simpleType (!_) = SDouble
 
 instance (Typeable t, Typed t, KnownNat n) => Typed (Array n t) where
-  typeOf               = Array typeOf
-  simpleType (Array t) = SArray t
+  typeOf               = Array $! typeOf
+  simpleType (Array t) = SArray $! t
 
 -- | A untyped type (no phantom type).
 data UType = forall a . Typeable a => UType (Type a)
 
 instance Eq UType where
-  UType ty1 == UType ty2 = typeRep ty1 == typeRep ty2
+  UType ty1 == UType ty2 = (typeRep $! ty1) == (typeRep $! ty2)
 
 -- * GHC.Generics-based defaults
 
