@@ -285,8 +285,8 @@ instance Typed Double where
   simpleType _ = SDouble
 
 instance (Typeable t, Typed t, KnownNat n) => Typed (Array n t) where
-  typeOf               = Array typeOf
-  simpleType (Array t) = SArray t
+  typeOf       = Array typeOf
+  simpleType _ = SArray (typeOf :: Type t)
 
 -- | A untyped type (no phantom type).
 data UType = forall a . Typeable a => UType (Type a)
