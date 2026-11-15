@@ -131,7 +131,7 @@ testArrayUpdateWrong len =
 
           -- Updated array
           array'' :: Array n Int64
-          array'' = arrayUpdate array' (p + 10) v
+          array'' = arrayUpdate array' p v
 
       in arrayElems array'' !! p == v
 
