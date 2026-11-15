@@ -117,8 +117,7 @@ testArrayUpdateElem len =
     position :: Gen Int
     position = chooseInt (0, fromIntegral (natVal len) - 1)
 
--- | Test that updating an array updates the element appropriately (if we
--- project that element we get the value we put in).
+-- | Test that updating an array at an out-of-bounds index raises an error.
 testArrayUpdateWrong :: forall n . KnownNat n => Proxy n -> Property
 testArrayUpdateWrong len =
     expectFailure   $
