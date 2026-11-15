@@ -61,4 +61,4 @@ arrayUpdate (Array (x:xs)) n y =
     -- | Append to an array while preserving length information at the type
     -- level.
     arrayAppend :: a -> Array (n - 1) a -> Array n a
-    arrayAppend x (Array xs) = Array (x:xs)
+    arrayAppend z (Array zs) = Array (z:zs)
