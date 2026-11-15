@@ -165,6 +165,10 @@ typeLength _ = fromIntegral $ natVal (Proxy :: Proxy n)
 typeSize :: forall n t . KnownNat n => Type (Array n t) -> Int
 typeSize ty@(Array ty'@(Array _)) = typeLength ty * typeSize ty'
 typeSize ty@(Array _            ) = typeLength ty
+typeSize (Struct array')          = arrayLength array'
+  where
+    arrayLength :: forall n t . KnownNat n => Array n t -> Int
+    arrayLength _ = fromIntegral $ natVal (Proxy :: Proxy n)
 
 instance TestEquality Type where
   testEquality Bool   Bool   = Just DE.Refl
